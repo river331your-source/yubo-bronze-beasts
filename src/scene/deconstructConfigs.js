@@ -22,6 +22,8 @@ export const DECONSTRUCT_DEFAULTS = {
   TURBULENCE_AMP: 0,
   /** 手完全张开时解构上限 80%，永远保留器物轮廓 */
   MAX_DECONSTRUCT: 0.8,
+  /** 第三段消散：driftDir 方向上的最大飘移距离 × UNIT */
+  DISSOLVE_MAX_DRIFT: 0.42,
   BODY_DEFAULT: { mode: 'radial', amount: 0.08 },
 };
 

@@ -37,7 +37,7 @@ export class AtlasSection {
 
     this.sceneManager = new SceneManager(this.canvas);
     this.interactions = {
-      deconstruct: new DeconstructInteraction(this.sceneManager),
+      deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
       pattern: new PatternFlashlightInteraction({
         lineartCanvas: this.lineartCanvas,
         getArtifact: () => this.sceneManager.getCurrentArtifact(),
@@ -60,9 +60,10 @@ export class AtlasSection {
     this.sceneManager.resize();
     requestAnimationFrame(() => this.sceneManager?.resize());
 
-    this._startInteractionLoop();
     this._bindKeyboard();
+  // 手势（含摄像头）先完成初始化，再启动 update 循环，避免 gc 为 null
     await this._startGesture();
+    this._startInteractionLoop();
   }
 
   /** onLeave: 停止 rAF、释放 WebGL、关闭摄像头 */
@@ -142,6 +143,8 @@ export class AtlasSection {
         this.gestureController
       );
     } catch (err) {
+      this.gestureController?.dispose();
+      this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
       this.ui.updateGestureLabel('none');
       this.ui.interactionHint.hidden = false;

@@ -58,8 +58,8 @@ export class SceneManager {
 
   _initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = null;
-    this.scene.fog = new THREE.FogExp2(0x070a08, 0.04);
+    this.scene.background = new THREE.Color(0x0a0d0a);
+    this.scene.fog = new THREE.FogExp2(0x0a0d0a, 0.04);
 
     const { width, height } = this._getStageSize();
     const aspect = width / height;
@@ -69,8 +69,9 @@ export class SceneManager {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
-      alpha: true,
+      alpha: false,
     });
+    this.renderer.setClearColor(0x0a0d0a, 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(width, height);
     // PBR 色彩管理：sRGB 输出 + ACES 色调映射，金属高光与色彩更准确
@@ -80,18 +81,26 @@ export class SceneManager {
 
     this.scene.add(this.modelGroup);
 
-    const stage = this.canvas.parentElement;
+    const stage =
+      this.canvas.closest('#atlas-viewport') ??
+      this.canvas.closest('#stage-column') ??
+      this.canvas.parentElement;
     this._resizeObserver = new ResizeObserver(() => this._onResize());
     if (stage) this._resizeObserver.observe(stage);
     window.addEventListener('resize', this._onWindowResize);
   }
 
   _getStageSize() {
-    const stage = this.canvas.parentElement;
-    if (!stage) return getViewportSize();
+    const viewport = this.canvas.parentElement;
+    const column = this.canvas.closest('#stage-column');
+    const el =
+      viewport && viewport.clientWidth > 0 && viewport.clientHeight > 0
+        ? viewport
+        : column ?? viewport;
+    if (!el) return getViewportSize();
     return {
-      width: stage.clientWidth,
-      height: stage.clientHeight,
+      width: Math.max(1, el.clientWidth),
+      height: Math.max(1, el.clientHeight),
     };
   }
 

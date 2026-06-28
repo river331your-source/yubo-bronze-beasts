@@ -6,14 +6,15 @@ import {
 
 const GESTURE_LABELS = {
   none: '未检测到手势',
-  fist: '握拳 — 完整形态',
-  open: '张开 — 考古解构',
+  fist: '握拳 · 聚合',
+  archaeology: '手势A · 考古解构',
+  dissolve: '手势B · 粒子消散',
+  transition: 'A→B 过渡',
   ok: '👌 手电筒已开启',
   point: '食指指向',
   unknown: '识别中…',
 };
 
-const ARTIFACT_SECTIONS = new Set(['atlas', 'pattern']);
 
 export class UIController {
   constructor() {
@@ -24,6 +25,7 @@ export class UIController {
     this.artifactNav = document.getElementById('artifact-nav');
     this.stageColumn = document.getElementById('stage-column');
     this.sectionAtlas = document.getElementById('section-atlas');
+    this.atlasViewport = document.getElementById('atlas-viewport');
     this.sectionPattern = document.getElementById('section-pattern');
     this.webglCanvas = document.getElementById('webgl-canvas');
     this.lineartCanvas = document.getElementById('pattern-lineart-canvas');
@@ -70,7 +72,7 @@ export class UIController {
     this.mainPage.addEventListener(
       'wheel',
       (e) => {
-        if (!ARTIFACT_SECTIONS.has(this.currentSection)) return;
+        if (this.currentSection !== 'atlas') return;
         if (Math.abs(e.deltaY) < 20) return;
         e.preventDefault();
         const next =
@@ -113,12 +115,10 @@ export class UIController {
     const isHome = sectionId === 'home';
     const isAtlas = sectionId === 'atlas';
     const isPattern = sectionId === 'pattern';
-    const isArtifact = ARTIFACT_SECTIONS.has(sectionId);
+    const isArtifactStage = isAtlas || isPattern;
 
     this.sectionHome?.classList.toggle('section-hidden', !isHome);
-    this.artifactNav?.classList.toggle('section-hidden', !isArtifact);
-    this.stageColumn?.classList.toggle('section-hidden', !isArtifact);
-    this.interactionPanel?.classList.toggle('section-hidden', !isAtlas);
+    this.stageColumn?.classList.toggle('section-hidden', !isArtifactStage);
     this.hidePlaceholder();
 
     if (isPlaceholderSection(sectionId)) {
@@ -145,7 +145,7 @@ export class UIController {
     } else if (isPattern) {
       this._applyModeHint('pattern');
       this.interactionHint.hidden = false;
-      this.artifactInfo.hidden = false;
+      this.artifactInfo.hidden = true;
       this.materialTimeline.hidden = true;
       this._syncArtifactStages();
     }
@@ -168,10 +168,12 @@ export class UIController {
     const isPatternNav = this.currentSection === 'pattern';
     const atlasPatternMode = isAtlas && this.currentMode === 'pattern';
 
-    const showWebgl = isAtlas && !atlasPatternMode;
+    const showAtlasChrome = isAtlas;
+    const showWebglViewport = isAtlas && !atlasPatternMode;
     const showLineart = isPatternNav || atlasPatternMode;
 
-    this.sectionAtlas?.classList.toggle('section-hidden', !showWebgl);
+    this.sectionAtlas?.classList.toggle('section-hidden', !showAtlasChrome);
+    this.atlasViewport?.classList.toggle('section-hidden', !showWebglViewport);
     this.sectionPattern?.classList.toggle('section-hidden', !showLineart);
 
     // 清理旧版 class 泄漏（opacity 叠层曾导致白屏）
@@ -186,6 +188,7 @@ export class UIController {
 
   _hideAllArtifactStages() {
     this.sectionAtlas?.classList.add('section-hidden');
+    this.atlasViewport?.classList.add('section-hidden');
     this.sectionPattern?.classList.add('section-hidden');
     this.webglCanvas?.classList.remove('scene-hidden');
     this.lineartCanvas?.classList.remove('visible');
@@ -211,6 +214,7 @@ export class UIController {
       currentSection: this.currentSection,
       currentMode: this.currentMode,
       '#section-atlas': cs(this.sectionAtlas),
+      '#atlas-viewport': cs(this.atlasViewport),
       '#section-pattern': cs(this.sectionPattern),
       '#stage-column': cs(this.stageColumn),
       '#artifact-nav': cs(this.artifactNav),
@@ -291,6 +295,14 @@ export class UIController {
   updateGestureLabel(gesture) {
     this.gestureLabel.textContent = GESTURE_LABELS[gesture] ?? gesture;
     this.gestureDot.classList.toggle('active', gesture !== 'none');
+  }
+
+  /** 解构模式调试：显示 A/B/握拳 状态（每帧更新） */
+  updateGestureDebugLabel(text) {
+    if (this.gestureLabel) {
+      this.gestureLabel.textContent = text;
+      this.gestureDot.classList.toggle('active', text !== '未检测到手势' && text !== '等待手势…');
+    }
   }
 
   showMaterialTimeline(show) {

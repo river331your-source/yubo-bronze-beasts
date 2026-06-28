@@ -29,22 +29,11 @@ function formatPartKey(partId) {
 }
 
 /**
- * 分件标注层
- * - SVG：质心锚点 + L 形引线（逻辑不变）
- * - HTML：横展线三行标签（发光圆点 + 名称 + 渐隐金线 + 小字）
+ * 分件标注层 — 仅 HTML 横展标签（无 SVG 引线/连线）
  */
 export class PartLabelOverlay {
   constructor(stageEl) {
     this.stageEl = stageEl;
-
-    this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    this.svg.setAttribute('class', 'part-label-layer part-label-svg');
-    this.svg.setAttribute('aria-hidden', 'true');
-    this._initDefs();
-    this.leaderG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    this.leaderG.setAttribute('class', 'part-label-leaders');
-    this.svg.append(this.defs, this.leaderG);
-    stageEl.appendChild(this.svg);
 
     this.htmlLayer = document.createElement('div');
     this.htmlLayer.className = 'part-label-html-layer';
@@ -58,57 +47,52 @@ export class PartLabelOverlay {
     this._labelEls = new Map();
   }
 
-  _initDefs() {
-    this.defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const glow = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
-    glow.setAttribute('id', 'part-dot-glow');
-    glow.setAttribute('x', '-80%');
-    glow.setAttribute('y', '-80%');
-    glow.setAttribute('width', '260%');
-    glow.setAttribute('height', '260%');
-    glow.innerHTML = `
-      <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
-      <feColorMatrix in="blur" type="matrix"
-        values="0 0 0 0 0.79  0 0 0 0 0.66  0 0 0 0 0.30  0 0 0 0.85 0"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    `;
-    this.defs.append(glow);
-  }
-
   setVisible(show) {
     this._visible = show;
-    this.svg.classList.toggle('visible', show);
     this.htmlLayer.classList.toggle('visible', show);
     if (!show) {
-      this.leaderG.replaceChildren();
-      this.htmlLayer.replaceChildren();
-      this._labelEls.clear();
-      this._animate = false;
+      this.clearLabels();
     }
   }
 
-  update(camera, pointCloud, artifactId) {
+  /** 手势B/握拳：立即清空所有标注 DOM */
+  clearLabels() {
+    this.htmlLayer.replaceChildren();
+    this._labelEls.clear();
+    this._animate = false;
+    this.htmlLayer.style.opacity = '0';
+  }
+
+  /**
+   * @param {number} gestureLabelOpacity 手势驱动的显隐系数 0~1（A=1, B=0, 过渡=1-dissolve）
+   */
+  update(camera, pointCloud, artifactId, gestureLabelOpacity = 1) {
     if (!this._visible || !pointCloud?.points) {
-      this.leaderG.replaceChildren();
-      this.htmlLayer.replaceChildren();
+      this.clearLabels();
+      return;
+    }
+
+    if (gestureLabelOpacity <= 0.02) {
+      this.clearLabels();
       return;
     }
 
     const progress = pointCloud.getDeconstructProgress();
     if (progress < FADE_START) {
-      this.svg.style.opacity = '0';
       this.htmlLayer.style.opacity = '0';
       this._animate = false;
       this._labelEls.forEach((el) => el.classList.remove('part-dock-label--animate'));
       return;
     }
 
-    const labelOpacity = smoothstep((progress - FADE_START) / (1 - FADE_START));
-    this.svg.style.opacity = String(labelOpacity);
+    const progressFade = smoothstep((progress - FADE_START) / (1 - FADE_START));
+    const labelOpacity = progressFade * gestureLabelOpacity;
     this.htmlLayer.style.opacity = String(labelOpacity);
+
+    if (labelOpacity <= 0.02) {
+      this.clearLabels();
+      return;
+    }
 
     if (!this._animate && labelOpacity > 0.05) {
       this._animate = true;
@@ -121,8 +105,6 @@ export class PartLabelOverlay {
     const w = rect.width;
     const h = rect.height;
     if (w <= 0 || h <= 0) return;
-
-    this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
     const leftDock = [];
     const rightDock = [];
@@ -174,7 +156,6 @@ export class PartLabelOverlay {
       })),
     ];
 
-    this._renderLeaders(labels);
     this._renderHtmlLabels(labels, w);
   }
 
@@ -250,43 +231,6 @@ export class PartLabelOverlay {
     }
   }
 
-  /** SVG：质心(起点) → L 形折线 → 避让后的标签 Y(终点) */
-  _renderLeaders(labels) {
-    this.leaderG.replaceChildren();
-
-    for (const lb of labels) {
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-      const anchorDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      anchorDot.setAttribute('cx', String(lb.sx));
-      anchorDot.setAttribute('cy', String(lb.sy));
-      anchorDot.setAttribute('r', '5');
-      anchorDot.setAttribute('class', 'part-label-anchor-dot');
-      anchorDot.setAttribute('filter', 'url(#part-dot-glow)');
-
-      const endX = lb.dotX;
-      const endY = lb.labelY;
-
-      // L 形：质心水平 → 停靠栏 X → 垂直到避让后的标签 Y（可长可短）
-      const leaderH = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      leaderH.setAttribute('x1', String(lb.sx));
-      leaderH.setAttribute('y1', String(lb.sy));
-      leaderH.setAttribute('x2', String(endX));
-      leaderH.setAttribute('y2', String(lb.sy));
-      leaderH.setAttribute('class', 'part-label-line');
-
-      const leaderV = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      leaderV.setAttribute('x1', String(endX));
-      leaderV.setAttribute('y1', String(lb.sy));
-      leaderV.setAttribute('x2', String(endX));
-      leaderV.setAttribute('y2', String(endY));
-      leaderV.setAttribute('class', 'part-label-line');
-
-      g.append(anchorDot, leaderH, leaderV);
-      this.leaderG.append(g);
-    }
-  }
-
   /**
    * HTML 横展线三行结构 + 左右镜像（复用 DOM，保留金线展开动效）
    */
@@ -344,7 +288,6 @@ export class PartLabelOverlay {
   }
 
   dispose() {
-    this.svg.remove();
     this.htmlLayer.remove();
   }
 }

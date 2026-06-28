@@ -35,9 +35,9 @@ export class PatternSection {
     this.ui.updateArtifactInfo(ARTIFACTS[this.artifactIndex]);
     this.ui.syncArtifactStages();
 
-    this._startInteractionLoop();
     this._bindKeyboard();
     await this._startGesture();
+    this._startInteractionLoop();
   }
 
   /** onLeave: 停止检测循环、关闭摄像头 */
@@ -95,6 +95,8 @@ export class PatternSection {
         this.gestureController
       );
     } catch (err) {
+      this.gestureController?.dispose();
+      this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
       this.ui.updateGestureLabel('none');
       this.ui.interactionHint.textContent +=

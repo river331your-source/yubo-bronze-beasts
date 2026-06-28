@@ -98,7 +98,7 @@ export const INTERACTION_MODES = {
   deconstruct: {
     id: 'deconstruct',
     label: '解构与重构',
-    hint: '握拳：FBX 完整模型 · 张开：青铜绿粒子分铸解构 · 1–5 切换',
+    hint: '握拳聚合 · 手势A食拇张后三指弯=拆解+标注 · 手势B五指全张=消散无标注',
   },
   pattern: {
     id: 'pattern',

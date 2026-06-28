@@ -250,13 +250,20 @@ export class PointCloudFromModel {
   constructor() {
     this.progress = 0;
     this.targetProgress = 0;
+    /** 第三段消散：0~1，叠加在考古拆解 burst 之上 */
+    this.dissolve = 0;
+    this.targetDissolve = 0;
     this.meshVisible = false;
     this.time = 0;
     this.unit = 1;
     this.homePos = new Float32Array(0);
     this.burstPos = new Float32Array(0);
+    /** 消散单位方向（归一化），幅度由 dissolve×pow(rnd,1.5) 控制 */
+    this.driftDir = new Float32Array(0);
+    this.baseColors = new Float32Array(0);
     this.rnd = new Float32Array(0);
     this.particleGroups = [];
+    this._modelCenter = new THREE.Vector3();
     this.meshRoot = null;
     this.points = null;
     this.geometry = null;
@@ -303,13 +310,16 @@ export class PointCloudFromModel {
 
     const bounds = computeModelBounds(modelRoot, spaceRoot);
     this.unit = bounds.unit;
+    this._modelCenter.copy(bounds.center);
 
     const ok = this._buildFromFbxParts(modelRoot, spaceRoot, bounds);
     if (!ok) return false;
     this._initPointsObject();
     this.progress = 0;
     this.targetProgress = 0;
-    this._updatePositions(0);
+    this.dissolve = 0;
+    this.targetDissolve = 0;
+    this._updatePositions(0, 0);
     this._syncMeshVisibility();
     return true;
   }
@@ -404,10 +414,16 @@ export class PointCloudFromModel {
     const count = particles.length;
     const home = new Float32Array(count * 3);
     const burst = new Float32Array(count * 3);
+    const driftDir = new Float32Array(count * 3);
     const rnd = new Float32Array(count);
     const colors = new Float32Array(count * 3);
+    const baseColors = new Float32Array(count * 3);
     const groups = [];
     const groupCounts = {};
+    const cx = this._modelCenter.x;
+    const cy = this._modelCenter.y;
+    const cz = this._modelCenter.z;
+    const unit = this.unit;
 
     particles.forEach((p, i) => {
       const i3 = i * 3;
@@ -417,6 +433,20 @@ export class PointCloudFromModel {
       burst[i3] = p.home.x + p.blockDir.x;
       burst[i3 + 1] = p.home.y + p.blockDir.y;
       burst[i3 + 2] = p.home.z + p.blockDir.z;
+
+      // 消散方向：中心向外 + 上飘 + 随机扰动（齑粉扬散）
+      const out = new THREE.Vector3(
+        p.home.x - cx,
+        p.home.y - cy + unit * 0.12,
+        p.home.z - cz
+      );
+      out.add(particleJitter(p.rnd * 97.3 + i, 0.28));
+      if (out.lengthSq() < 1e-8) out.set(0, 1, 0);
+      out.normalize();
+      driftDir[i3] = out.x;
+      driftDir[i3 + 1] = out.y;
+      driftDir[i3 + 2] = out.z;
+
       rnd[i] = p.rnd;
       groups.push(p.partId);
       groupCounts[p.partId] = (groupCounts[p.partId] ?? 0) + 1;
@@ -424,10 +454,15 @@ export class PointCloudFromModel {
       colors[i3] = col.r;
       colors[i3 + 1] = col.g;
       colors[i3 + 2] = col.b;
+      baseColors[i3] = col.r;
+      baseColors[i3 + 1] = col.g;
+      baseColors[i3 + 2] = col.b;
     });
 
     this.homePos = home;
     this.burstPos = burst;
+    this.driftDir = driftDir;
+    this.baseColors = baseColors;
     this.rnd = rnd;
     this.particleGroups = groups;
     console.log('[PointCloud] 粒子', count, '| UNIT', this.unit.toFixed(2), groupCounts);
@@ -469,19 +504,26 @@ export class PointCloudFromModel {
       colors[i3] = col.r;
       colors[i3 + 1] = col.g;
       colors[i3 + 2] = col.b;
+      this.baseColors[i3] = col.r;
+      this.baseColors[i3 + 1] = col.g;
+      this.baseColors[i3 + 2] = col.b;
     }
     this.geometry.attributes.color.needsUpdate = true;
   }
 
   /**
-   * MediaPipe接入点：握拳 → setDeconstructState(0) / 'cloud'
-   * MediaPipe接入点：张开程度(0~1) → progress×MAX_DECONSTRUCT 连续解构
-   * MediaPipe接入点：转手增量 → setHandRotation(0, ry) 仅 Y 轴，与 progress 解耦
+   * 控制量 1【张合→progress】：openness 前半程 home↔burst
+   * 控制量 2【张合→dissolve】：openness 后半程 burst 上叠加 driftDir 飘散
+   * 控制量 3【平移→rotation.y】：由 DeconstructInteraction 写入 setHandRotation
    */
   setDeconstructState(value) {
     const maxDec = this.config?.MAX_DECONSTRUCT ?? 0.8;
     if (typeof value === 'number') {
       this.targetProgress = THREE.MathUtils.clamp(value, 0, 1) * maxDec;
+      if (value < 0.08) {
+        this.targetDissolve = 0;
+        this.dissolve = 0;
+      }
       this.meshVisible = false;
       if (this.points) this.points.visible = true;
       return;
@@ -489,10 +531,14 @@ export class PointCloudFromModel {
     switch (value) {
       case 'solid':
         this.targetProgress = 0;
+        this.targetDissolve = 0;
+        this.dissolve = 0;
         this.meshVisible = true;
         break;
       case 'cloud':
         this.targetProgress = 0;
+        this.targetDissolve = 0;
+        this.dissolve = 0;
         this.meshVisible = false;
         break;
       case 'deconstruct':
@@ -503,6 +549,11 @@ export class PointCloudFromModel {
         return;
     }
     if (value !== 'solid' && this.points) this.points.visible = true;
+  }
+
+  /** 控制量 2【旋转→dissolve】0~1，叠加飘散，不替换 progress */
+  setDissolveState(value) {
+    this.targetDissolve = THREE.MathUtils.clamp(value, 0, 1);
   }
 
   setHandRotation(rotX, rotY) {
@@ -521,10 +572,12 @@ export class PointCloudFromModel {
     this.time += dt;
     const lambda = 4 / (this.config?.TRANSITION_SEC ?? 1.5);
     this.progress = damp(this.progress, this.targetProgress, lambda, dt);
-    this._updatePositions(this.progress);
+    this.dissolve = damp(this.dissolve, this.targetDissolve, lambda, dt);
+    this._updatePositions(this.progress, this.dissolve);
     this._syncMeshVisibility();
     const p = smoothstep(this.progress);
-    this.material.opacity = THREE.MathUtils.lerp(0.92, 0.72, p);
+    const d = smoothstep(this.dissolve);
+    this.material.opacity = THREE.MathUtils.lerp(0.92, THREE.MathUtils.lerp(0.72, 0.55, d), p);
     this.points.visible = !this.meshVisible || this.progress > 0.02;
     if (this._autoSpin) this._baseRotY += dt * 0.12;
     this.points.rotation.x = this._handRotX;
@@ -580,20 +633,43 @@ export class PointCloudFromModel {
     }
   }
 
-  /** 分件整块平移：smoothstep 插值，禁用 stagger / drift / 消散叠加 */
-  _updatePositions(progress) {
+  /**
+   * 三组位置 + 两控制量：
+   * base = lerp(home, burst, smoothstep(progress))  ← 张合
+   * final = base + driftDir * dissolve * pow(rnd,1.5) * maxDrift + sinSway ← 旋转消散
+   */
+  _updatePositions(progress, dissolve) {
     const pos = this.geometry.attributes.position.array;
-    const { homePos, burstPos } = this;
-    const count = this.rnd.length;
+    const colors = this.geometry.attributes.color.array;
+    const { homePos, burstPos, driftDir, baseColors, rnd } = this;
+    const count = rnd.length;
     const p = smoothstep(progress);
+    const d = smoothstep(dissolve);
+    const maxDrift = (this.config?.DISSOLVE_MAX_DRIFT ?? 0.42) * this.unit;
+    const swayAmp = this.unit * 0.035;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      pos[i3] = THREE.MathUtils.lerp(homePos[i3], burstPos[i3], p);
-      pos[i3 + 1] = THREE.MathUtils.lerp(homePos[i3 + 1], burstPos[i3 + 1], p);
-      pos[i3 + 2] = THREE.MathUtils.lerp(homePos[i3 + 2], burstPos[i3 + 2], p);
+      const bx = THREE.MathUtils.lerp(homePos[i3], burstPos[i3], p);
+      const by = THREE.MathUtils.lerp(homePos[i3 + 1], burstPos[i3 + 1], p);
+      const bz = THREE.MathUtils.lerp(homePos[i3 + 2], burstPos[i3 + 2], p);
+
+      const layered = Math.pow(rnd[i], 1.5);
+      const driftAmt = d * layered * maxDrift;
+      const sway =
+        Math.sin(this.time * 2.4 + rnd[i] * 12.989) * swayAmp * d;
+
+      pos[i3] = bx + driftDir[i3] * driftAmt + driftDir[i3] * sway;
+      pos[i3 + 1] = by + driftDir[i3 + 1] * driftAmt + sway;
+      pos[i3 + 2] = bz + driftDir[i3 + 2] * driftAmt + driftDir[i3 + 2] * sway;
+
+      const brighten = d * 0.72;
+      colors[i3] = THREE.MathUtils.lerp(baseColors[i3], 1, brighten);
+      colors[i3 + 1] = THREE.MathUtils.lerp(baseColors[i3 + 1], 1, brighten);
+      colors[i3 + 2] = THREE.MathUtils.lerp(baseColors[i3 + 2], 1, brighten);
     }
     this.geometry.attributes.position.needsUpdate = true;
+    this.geometry.attributes.color.needsUpdate = true;
     this.geometry.computeBoundingSphere();
   }
 
@@ -629,6 +705,8 @@ export class PointCloudFromModel {
     this.meshRoot = null;
     this.homePos = new Float32Array(0);
     this.burstPos = new Float32Array(0);
+    this.driftDir = new Float32Array(0);
+    this.baseColors = new Float32Array(0);
     this.rnd = new Float32Array(0);
     this.particleGroups = [];
     this._partCentroidsLocal = {};
