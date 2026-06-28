@@ -9,9 +9,6 @@ import {
   resolvePublicAsset,
 } from './relicSilhouetteFallback.js';
 
-/** 剪影诊断模式：opacity 0.8 + 红框 + 放大。确认可见后改为 false */
-const SILHOUETTE_DEBUG = true;
-
 const GESTURE_LABELS = {
   none: '未检测到手势',
   fist: '握拳 · 聚合',
@@ -110,25 +107,11 @@ export class UIController {
   _buildCarousel() {
     if (!this.carousel) return;
 
-    this.artifactNav?.setAttribute(
-      'data-silhouette-debug',
-      SILHOUETTE_DEBUG ? '1' : '0'
-    );
-
-    console.group('[文物剪影] 路径诊断');
     ARTIFACTS.forEach((artifact, index) => {
       const relic = relics[artifact.id] ?? {};
       const name = relic.name ?? artifact.name;
       const era = relic.era ?? artifact.era;
       const thumbnail = resolvePublicAsset(relic.thumbnail ?? '');
-
-      console.log(`  ${artifact.id}`, {
-        relicJson: relic.thumbnail,
-        resolved: thumbnail,
-        absolute: thumbnail.startsWith('http')
-          ? thumbnail
-          : new URL(thumbnail, window.location.href).href,
-      });
 
       const item = document.createElement('button');
       item.className = `arc-node${index === DEFAULT_ARTIFACT_INDEX ? ' active' : ''}`;
@@ -158,7 +141,6 @@ export class UIController {
       }
       this.carousel.appendChild(item);
     });
-    console.groupEnd();
   }
 
   /** 切换版块可见性（由 AppRouter 调用） */

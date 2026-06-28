@@ -10,18 +10,10 @@ export function bindRelicSilhouetteFallback(img, meta = {}) {
   const label = meta.id ? `[剪影 ${meta.id}]` : '[剪影]';
 
   const hide = (reason) => {
-    console.warn(`${label} 加载失败 → 隐藏`, reason, img.currentSrc || img.src);
+    console.warn(`${label} 加载失败`, reason, img.currentSrc || img.src);
     img.classList.add('arc-silhouette--failed');
     img.removeAttribute('src');
   };
-
-  img.addEventListener('load', () => {
-    console.log(`${label} 加载成功`, {
-      src: img.currentSrc || img.src,
-      naturalWidth: img.naturalWidth,
-      naturalHeight: img.naturalHeight,
-    });
-  });
 
   img.addEventListener('error', () => {
     hide('error 事件');
