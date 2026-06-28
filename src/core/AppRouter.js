@@ -11,8 +11,19 @@ export class AppRouter {
   }
 
   async switchSection(sectionId) {
-    if (this._busy || sectionId === this.currentSection) return;
+    if (this._busy) return;
     if (!this.sections[sectionId]) return;
+
+    // 再次点击当前导航（如图鉴→图鉴）时重置为解构模式，避免线稿层残留
+    if (sectionId === this.currentSection) {
+      if (sectionId === 'atlas') {
+        this.ui.setMode('deconstruct');
+        this.sections.atlas.switchMode?.('deconstruct');
+      }
+      this.ui.logSectionState('AppRouter.switchSection(same)');
+      return;
+    }
+
     this._busy = true;
 
     const prev = this.currentSection;

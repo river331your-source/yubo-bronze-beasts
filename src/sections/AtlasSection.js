@@ -1,16 +1,14 @@
 import { SceneManager } from '../scene/SceneManager.js';
 import { GestureController } from '../interactions/GestureController.js';
 import { DeconstructInteraction } from '../interactions/DeconstructInteraction.js';
-import { PatternFlashlightInteraction } from '../interactions/PatternFlashlightInteraction.js';
 import { MaterialRestoreInteraction } from '../interactions/MaterialRestoreInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
 
 /** 神兽图鉴：五件青铜器 + 三种交互模式 + 手势 */
 export class AtlasSection {
-  constructor({ canvas, lineartCanvas, videoEl, ui }) {
+  constructor({ canvas, videoEl, ui }) {
     this.canvas = canvas;
-    this.lineartCanvas = lineartCanvas;
     this.videoEl = videoEl;
     this.ui = ui;
 
@@ -39,11 +37,6 @@ export class AtlasSection {
     this.sceneManager = new SceneManager(this.canvas);
     this.interactions = {
       deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
-      pattern: new PatternFlashlightInteraction({
-        lineartCanvas: this.lineartCanvas,
-        getArtifact: () => this.sceneManager.getCurrentArtifact(),
-        webglCanvas: this.canvas,
-      }),
       material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
     };
 
@@ -52,7 +45,6 @@ export class AtlasSection {
 
     this.ui.selectArtifact(DEFAULT_ARTIFACT_INDEX);
     this.ui.updateArtifactInfo(artifact);
-    this.ui.setMode('deconstruct');
     this.currentMode = 'deconstruct';
     this.switchMode('deconstruct');
     this.ui.syncArtifactStages();
@@ -156,9 +148,11 @@ export class AtlasSection {
       this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
       this.ui.updateGestureLabel('none');
-      this.ui.interactionHint.hidden = false;
-      this.ui.interactionHint.textContent +=
-        ' （摄像头未授权，可用右侧卡片切换模式预览）';
+      this.ui._applySectionHint('atlas', this.currentMode);
+      if (this.ui.interactionHint) {
+        this.ui.interactionHint.textContent +=
+          ' （摄像头未授权，可用右侧卡片切换模式预览）';
+      }
     }
   }
 
@@ -194,9 +188,6 @@ export class AtlasSection {
       this._interactionRafId = requestAnimationFrame(tick);
 
       const gc = this.gestureController ?? null;
-      if (this.currentMode === 'pattern') {
-        this.interactions.pattern?.update(gc);
-      }
       if (this.currentMode === 'deconstruct') {
         this.interactions.deconstruct?.update(gc);
       }

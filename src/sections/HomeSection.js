@@ -1,3 +1,5 @@
+import { bindHomeImageFallbacks } from '../ui/homeImageFallback.js';
+
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
  * onEnter: 绑定进入按钮、播放入场动画
@@ -10,6 +12,7 @@ export class HomeSection {
     this.root = document.getElementById('section-home');
     this.active = false;
     this._onEnterClick = () => this.onRequestAtlas?.();
+    bindHomeImageFallbacks(this.root);
   }
 
   async onEnter() {

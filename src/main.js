@@ -20,7 +20,6 @@ class App {
         }),
         atlas: new AtlasSection({
           canvas: document.getElementById('webgl-canvas'),
-          lineartCanvas: document.getElementById('pattern-lineart-canvas'),
           videoEl: document.getElementById('camera-feed'),
           ui: this.ui,
         }),

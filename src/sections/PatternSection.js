@@ -32,7 +32,7 @@ export class PatternSection {
     this.flashlight.activate();
 
     this.ui.selectArtifact(this.artifactIndex);
-    this.ui.updateArtifactInfo(ARTIFACTS[this.artifactIndex]);
+    this.ui._applySectionHint('pattern');
     this.ui.syncArtifactStages();
 
     this._bindKeyboard();
@@ -99,8 +99,11 @@ export class PatternSection {
       this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
       this.ui.updateGestureLabel('none');
-      this.ui.interactionHint.textContent +=
-        ' （摄像头未授权，按住鼠标拖动预览）';
+      this.ui._applySectionHint('pattern');
+      if (this.ui.interactionHint) {
+        this.ui.interactionHint.textContent +=
+          ' （摄像头未授权，按住鼠标拖动预览）';
+      }
     }
   }
 
