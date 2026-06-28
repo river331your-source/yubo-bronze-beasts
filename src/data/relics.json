@@ -1,0 +1,44 @@
+{
+  "fuhao-xiao-zun": {
+    "era": "商代晚期",
+    "pieces": {
+      "lid": { "name": "盖/鸮首", "order": 1 },
+      "body": { "name": "器身", "order": 2 }
+    }
+  },
+  "shenshou-bronze": {
+    "era": "商代晚期",
+    "pieces": {
+      "head": { "name": "兽首", "order": 1 },
+      "body": { "name": "器身", "order": 2 },
+      "feet": { "name": "足", "order": 3 },
+      "back": { "name": "背饰", "order": 4 }
+    }
+  },
+  "shoumian-fang-gong": {
+    "era": "西周中期",
+    "pieces": {
+      "lid": { "name": "盖", "order": 1 },
+      "body": { "name": "器身", "order": 2 },
+      "foot": { "name": "圈足", "order": 3 }
+    }
+  },
+  "panlong-he": {
+    "era": "商周早期",
+    "pieces": {
+      "lid": { "name": "盖", "order": 1 },
+      "spout": { "name": "流", "order": 2 },
+      "body": { "name": "器身", "order": 3 },
+      "feet": { "name": "足", "order": 4 }
+    }
+  },
+  "pu-yan-he": {
+    "era": "商代晚期",
+    "pieces": {
+      "head_spout": { "name": "雁首/流", "order": 1 },
+      "lid": { "name": "盖", "order": 2 },
+      "body": { "name": "器身", "order": 3 },
+      "feet": { "name": "足", "order": 4 }
+    }
+  }
+}
