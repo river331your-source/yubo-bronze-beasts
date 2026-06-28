@@ -37,14 +37,13 @@ export class PatternLineartView {
   resize() {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
+    const rect = parent.getBoundingClientRect();
+    const w = Math.floor(rect.width);
+    const h = Math.floor(rect.height);
     if (w === 0 || h === 0) return;
     const dpr = Math.min(window.devicePixelRatio, 2);
     this.canvas.width = w * dpr;
     this.canvas.height = h * dpr;
-    this.canvas.style.width = `${w}px`;
-    this.canvas.style.height = `${h}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this._goldBuffer.width = w * dpr;
     this._goldBuffer.height = h * dpr;

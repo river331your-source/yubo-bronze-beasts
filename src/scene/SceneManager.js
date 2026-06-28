@@ -73,7 +73,7 @@ export class SceneManager {
     });
     this.renderer.setClearColor(0x0a0d0a, 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
     // PBR 色彩管理：sRGB 输出 + ACES 色调映射，金属高光与色彩更准确
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -91,17 +91,17 @@ export class SceneManager {
   }
 
   _getStageSize() {
-    const viewport = this.canvas.parentElement;
+    const viewport = this.canvas.closest('#atlas-viewport') ?? this.canvas.parentElement;
     const column = this.canvas.closest('#stage-column');
-    const el =
-      viewport && viewport.clientWidth > 0 && viewport.clientHeight > 0
-        ? viewport
-        : column ?? viewport;
-    if (!el) return getViewportSize();
-    return {
-      width: Math.max(1, el.clientWidth),
-      height: Math.max(1, el.clientHeight),
-    };
+    for (const el of [viewport, column].filter(Boolean)) {
+      const rect = el.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      if (width > 0 && height > 0) {
+        return { width, height };
+      }
+    }
+    return getViewportSize();
   }
 
   /** 三点布光 + 环境光 */
@@ -390,7 +390,7 @@ export class SceneManager {
     if (width === 0 || height === 0) return;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
     this._frameToCenter();
   }
 

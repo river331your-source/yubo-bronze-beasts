@@ -54,19 +54,16 @@ body {
   font-family: var(--font-body);
 }
 
-/* 16:9 画幅容器，居中显示，两侧/上下留黑边 */
+/* 16:9 画幅容器，居中显示，两侧/上下留黑边（勿对整页 zoom，会破坏 WebGL canvas 像素对齐） */
 #viewport-16-9 {
-  --ui-scale: 1.18;
   position: relative;
-  /* 逻辑尺寸略缩小 + zoom 放大 → 填满视口且内容整体变大，无横向滚动 */
-  width: min(calc(100vw / var(--ui-scale)), calc(100vh * 16 / 9 / var(--ui-scale)));
-  height: min(calc(100vh / var(--ui-scale)), calc(100vw * 9 / 16 / var(--ui-scale)));
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
   aspect-ratio: 16 / 9;
   margin: auto;
   overflow: hidden;
   background: var(--ink-black);
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
-  zoom: var(--ui-scale);
 }
 
 body {
@@ -629,9 +626,9 @@ body {
 /* ===== 主交互页（设计稿还原） ===== */
 
 #main-page {
-  --header-h: 56px;
-  --col-left: 280px;
-  --col-right: 300px;
+  --header-h: calc(56px * var(--ui-scale));
+  --col-left: calc(280px * var(--ui-scale));
+  --col-right: calc(300px * var(--ui-scale));
   display: flex;
   flex-direction: column;
   background: var(--stage-bg);
@@ -1743,7 +1740,7 @@ body {
 /* 响应式 */
 @media (max-width: 768px) {
   #main-page {
-    --col-left: 200px;
+    --col-left: calc(200px * var(--ui-scale));
     --col-right: 0;
   }
 
