@@ -28,6 +28,12 @@
   --tier-bg: rgba(111, 148, 120, 0.35);
   --tier-line: rgba(111, 148, 120, 0.22);
   --grid-bronze: rgba(201, 168, 76, 0.06);
+  /** 整体 UI 缩放（100% 浏览器缩放下更舒展，可调 1.15~1.25） */
+  --ui-scale: 1.18;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale));
 }
 
 *,
@@ -50,14 +56,17 @@ body {
 
 /* 16:9 画幅容器，居中显示，两侧/上下留黑边 */
 #viewport-16-9 {
+  --ui-scale: 1.18;
   position: relative;
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  /* 逻辑尺寸略缩小 + zoom 放大 → 填满视口且内容整体变大，无横向滚动 */
+  width: min(calc(100vw / var(--ui-scale)), calc(100vh * 16 / 9 / var(--ui-scale)));
+  height: min(calc(100vh / var(--ui-scale)), calc(100vw * 9 / 16 / var(--ui-scale)));
   aspect-ratio: 16 / 9;
   margin: auto;
   overflow: hidden;
   background: var(--ink-black);
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  zoom: var(--ui-scale);
 }
 
 body {
