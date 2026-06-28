@@ -98,7 +98,7 @@ export const INTERACTION_MODES = {
   deconstruct: {
     id: 'deconstruct',
     label: '解构与重构',
-    hint: '握拳聚合 · 手势A食拇张后三指弯=拆解+标注 · 手势B五指全张=消散无标注',
+    hint: '握拳聚合 · 手势A拆解+标注 · 手势B消散 · 双手拍合切换文物',
   },
   pattern: {
     id: 'pattern',

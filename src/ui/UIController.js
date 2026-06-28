@@ -10,6 +10,8 @@ const GESTURE_LABELS = {
   archaeology: '手势A · 考古解构',
   dissolve: '手势B · 粒子消散',
   transition: 'A→B 过渡',
+  two_hands: '双手 · 拍手切件',
+  clap: '拍手 · 切换文物',
   ok: '👌 手电筒已开启',
   point: '食指指向',
   unknown: '识别中…',
@@ -39,6 +41,7 @@ export class UIController {
     this.gestureLabel = document.getElementById('gesture-label');
     this.gestureStatus = document.getElementById('gesture-status');
     this.gestureDot = document.querySelector('.gesture-dot');
+    this.clapFlash = document.getElementById('clap-flash');
 
     this.currentMode = 'deconstruct';
     this.currentArtifactIndex = DEFAULT_ARTIFACT_INDEX;
@@ -297,12 +300,27 @@ export class UIController {
     this.gestureDot.classList.toggle('active', gesture !== 'none');
   }
 
-  /** 解构模式调试：显示 A/B/握拳 状态（每帧更新） */
+  /** 解构模式调试：显示 A/B/握拳/双手/拍手 状态（每帧更新） */
   updateGestureDebugLabel(text) {
     if (this.gestureLabel) {
       this.gestureLabel.textContent = text;
       this.gestureDot.classList.toggle('active', text !== '未检测到手势' && text !== '等待手势…');
     }
+  }
+
+  /** 拍手切换文物：屏幕白光快闪反馈 */
+  playClapFlash() {
+    const el = this.clapFlash;
+    if (!el) return;
+    el.classList.remove('fade');
+    el.classList.add('active');
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        el.classList.add('fade');
+        el.classList.remove('active');
+        window.setTimeout(() => el.classList.remove('fade'), 380);
+      }, 70);
+    });
   }
 
   showMaterialTimeline(show) {

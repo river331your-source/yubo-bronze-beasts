@@ -23,6 +23,7 @@ export class AtlasSection {
     this._interactionRunning = false;
     this._interactionRafId = null;
     this._onKeydown = null;
+    this._artifactSwitchBusy = false;
   }
 
   /** onEnter: 创建 Three.js 场景、加载 FBX、启用手势与解构交互 */
@@ -111,13 +112,19 @@ export class AtlasSection {
   }
 
   async loadArtifact(index) {
-    if (!this.sceneManager) return;
-    this.ui.setArtifactLoading(index, true);
-    const artifact = await this.sceneManager.loadArtifact(index);
-    this.ui.setArtifactLoading(index, false);
-    this.ui.updateArtifactInfo(artifact);
-    Object.values(this.interactions).forEach((i) => i.deactivate?.());
-    this.switchMode(this.currentMode);
+    if (!this.sceneManager || this._artifactSwitchBusy) return;
+    this._artifactSwitchBusy = true;
+    try {
+      this.ui.setArtifactLoading(index, true);
+      const artifact = await this.sceneManager.loadArtifact(index);
+      this.ui.setArtifactLoading(index, false);
+      this.ui.updateArtifactInfo(artifact);
+      Object.values(this.interactions).forEach((i) => i.deactivate?.());
+      this.switchMode(this.currentMode);
+      this.sceneManager.resize();
+    } finally {
+      this._artifactSwitchBusy = false;
+    }
   }
 
   async _startGesture() {
@@ -137,6 +144,8 @@ export class AtlasSection {
         }
       };
 
+      this.gestureController.onClap = () => this._onClapSwitchArtifact();
+
       this.skeletonOverlay = new SkeletonOverlay(
         this.videoEl,
         document.getElementById('skeleton-overlay'),
@@ -155,6 +164,15 @@ export class AtlasSection {
 
   _handleGesture(gesture) {
     this.interactions[this.currentMode]?.onGesture?.(gesture);
+  }
+
+  /** 拍手 → 顺序切换下一件文物（循环） */
+  async _onClapSwitchArtifact() {
+    if (!this.active || this._artifactSwitchBusy) return;
+    const next = (this.ui.currentArtifactIndex + 1) % ARTIFACTS.length;
+    this.ui.playClapFlash();
+    this.ui.selectArtifact(next);
+    await this.loadArtifact(next);
   }
 
   _bindKeyboard() {

@@ -116,7 +116,15 @@ export class DeconstructInteraction {
     let targetVelY = 0;
     let labelOpacity = 0;
 
-    if (handPresent && typeof gestureController.mapGestureToStages === 'function') {
+    if (handPresent && gestureController.numHands >= 2) {
+      // 【手数量分流】双手：不驱动解构/消散，仅显示调试状态
+      gestureController.resetPalmTracking?.();
+      labelOpacity = 0;
+      if (gestureController.modeDisplayLabel) {
+        this.ui?.updateGestureDebugLabel?.(gestureController.modeDisplayLabel);
+      }
+      targetVelY = 0;
+    } else if (handPresent && typeof gestureController.mapGestureToStages === 'function') {
       const stages = gestureController.mapGestureToStages();
       if (stages) {
         pc.setDeconstructState(stages.deconstruct);

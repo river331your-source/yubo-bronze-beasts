@@ -10,6 +10,12 @@ const MODEL_PATH =
 const FINGER_CURLED = 0.4;
 const FINGER_EXTENDED = 0.56;
 
+/** 拍手判定：掌心距阈值 + 合拢速度 + 冷却（防连击） */
+const CLAP_APART_DIST = 0.24;
+const CLAP_NEAR_DIST = 0.11;
+const CLAP_MIN_CLOSE_VELOCITY = 0.65;
+const CLAP_COOLDOWN_MS = 900;
+
 /**
  * 手势 A/B 靠后三指区分（互斥）：
  * - A 考古解构：食+拇伸，中/无/小弯
@@ -25,11 +31,19 @@ export class GestureController {
 
     this.onGestureChange = null;
     this.onHandsDistanceChange = null;
+    /** 拍手成功时回调（由 AtlasSection 注册） */
+    this.onClap = null;
 
     this.currentGesture = 'none';
     this.handsDistance = 0;
 
-    /** 调试：当前解构手势 A | B | transition | fist | none */
+    /** 调试：检测到的手数量、掌心距、冷却状态 */
+    this.numHands = 0;
+    this.palmDistance = 0;
+    this.clapInCooldown = false;
+    this.clapTriggeredThisFrame = false;
+
+    /** 调试：当前解构手势 A | B | transition | fist | two_hands | none */
     this.deconstructMode = 'none';
     this.modeDisplayLabel = '等待手势…';
 
@@ -37,6 +51,11 @@ export class GestureController {
     this._lastProcessTime = performance.now();
     /** 五指伸展度 0~1（平滑，指尖→掌心距离） */
     this._smoothExtend = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+
+    /** 拍手：上一帧双手掌心距、是否曾分开、冷却截止 */
+    this._prevTwoHandPalmDist = null;
+    this._handsWereApart = false;
+    this._clapCooldownUntil = 0;
   }
 
   async init() {
@@ -83,16 +102,28 @@ export class GestureController {
     const now = performance.now();
     const dt = Math.min(0.05, (now - this._lastProcessTime) / 1000);
     this._lastProcessTime = now;
+    this.numHands = hands.length;
+    this.clapTriggeredThisFrame = false;
 
     if (hands.length === 0) {
+      this._resetClapState();
       this.resetPalmTracking();
       this.deconstructMode = 'none';
       this.modeDisplayLabel = '未检测到手势';
+      this.palmDistance = 0;
       this._emitGesture('none');
       this._emitHandsDistance(0);
       return;
     }
 
+    // 【手数量分流】双手 → 拍手判定，不跑单手解构/消散
+    if (hands.length >= 2) {
+      this._processTwoHands(hands, now, dt);
+      return;
+    }
+
+    // 【手数量分流】单手 → 原有握拳/A/B/平移逻辑，拍手不介入
+    this._resetClapState();
     const lm = hands[0];
     this._updateSmoothFingerExtend(lm, dt);
     this.deconstructMode = this._resolveDeconstructMode(lm);
@@ -100,12 +131,63 @@ export class GestureController {
 
     const uiGesture = this._classifyUiGesture(lm);
     this._emitGesture(uiGesture);
+    this._emitHandsDistance(0);
+  }
 
-    if (hands.length >= 2) {
-      this._emitHandsDistance(this._calcHandsDistance(hands[0], hands[1]));
-    } else {
-      this._emitHandsDistance(0);
+  /** 双手帧：掌心距离 + 拍手判定（含速度阈值与冷却） */
+  _processTwoHands(hands, now, dt) {
+    this.resetPalmTracking();
+    this.palmDistance = this._calcPalmDistance(hands[0], hands[1]);
+    this.clapInCooldown = now < this._clapCooldownUntil;
+
+    if (this.palmDistance > CLAP_APART_DIST) {
+      this._handsWereApart = true;
     }
+
+    let closeVelocity = 0;
+    if (this._prevTwoHandPalmDist != null && dt > 0) {
+      closeVelocity = (this._prevTwoHandPalmDist - this.palmDistance) / dt;
+    }
+
+  // 【拍手判定】曾分开 + 骤近至阈值 + 合拢速度够快
+    if (
+      !this.clapInCooldown &&
+      this._handsWereApart &&
+      this.palmDistance < CLAP_NEAR_DIST &&
+      closeVelocity > CLAP_MIN_CLOSE_VELOCITY &&
+      this._prevTwoHandPalmDist != null &&
+      this._prevTwoHandPalmDist >= CLAP_NEAR_DIST
+    ) {
+      this._clapCooldownUntil = now + CLAP_COOLDOWN_MS;
+      this._handsWereApart = false;
+      this.clapTriggeredThisFrame = true;
+      this.clapInCooldown = true;
+      this.deconstructMode = 'clap';
+      this.modeDisplayLabel = '拍手 · 切换文物';
+      this._emitGesture('clap');
+      if (this.onClap) this.onClap();
+    } else {
+      this.deconstructMode = 'two_hands';
+      this.modeDisplayLabel = this._twoHandsDebugLabel(closeVelocity);
+      this._emitGesture('two_hands');
+    }
+
+    this._prevTwoHandPalmDist = this.palmDistance;
+    this._emitHandsDistance(this._calcHandsDistance(hands[0], hands[1]));
+  }
+
+  _twoHandsDebugLabel(closeVelocity) {
+    const dist = this.palmDistance.toFixed(2);
+    const vel = closeVelocity.toFixed(2);
+    const cd = this.clapInCooldown ? '冷却中' : '就绪';
+    return `双手 · 距${dist} · 速${vel} · 拍手${cd}`;
+  }
+
+  _resetClapState() {
+    this._prevTwoHandPalmDist = null;
+    this._handsWereApart = false;
+    this.palmDistance = 0;
+    this.clapInCooldown = performance.now() < this._clapCooldownUntil;
   }
 
   /** 纹样模式：👌 捏合手电（与 A 考古姿态区分：需拇指食指捏拢） */
@@ -146,6 +228,10 @@ export class GestureController {
         return 'A→B 过渡';
       case 'fist':
         return '握拳 · 聚合';
+      case 'two_hands':
+        return this._twoHandsDebugLabel(0);
+      case 'clap':
+        return '拍手 · 切换文物 ✓';
       default:
         return '识别中…';
     }
@@ -231,9 +317,11 @@ export class GestureController {
 
   /**
    * 解构阶段 + 标注显隐系数
-   * labelOpacity: A=1, B=0, A→B 过渡=1-dissolve
+   * 【手数量分流】双手时返回 null，不驱动单手解构/消散
    */
   mapGestureToStages() {
+    if (this.numHands >= 2) return null;
+
     const lm = this.lastResults?.landmarks?.[0];
     if (!lm) return null;
 
@@ -304,6 +392,11 @@ export class GestureController {
     const wristB = handB[0];
     const dist = this._dist2d(wristA, wristB);
     return Math.min(1, Math.max(0, (dist - 0.15) / 0.55));
+  }
+
+  /** 拍手用：两手掌心欧氏距离（归一化坐标，未压缩） */
+  _calcPalmDistance(handA, handB) {
+    return this._dist2d(this._getPalmCenter(handA), this._getPalmCenter(handB));
   }
 
   _dist2d(a, b) {
@@ -397,6 +490,7 @@ export class GestureController {
     this.running = false;
     this.onGestureChange = null;
     this.onHandsDistanceChange = null;
+    this.onClap = null;
     this.landmarker?.close?.();
     this.landmarker = null;
     this.lastResults = null;

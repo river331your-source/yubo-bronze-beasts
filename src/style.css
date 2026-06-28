@@ -1011,6 +1011,26 @@ body {
   background: var(--stage-bg);
 }
 
+/* 拍手切换：全屏白光快闪 */
+.clap-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+}
+
+.clap-flash.active {
+  opacity: 0.82;
+  transition: opacity 0.06s ease-out;
+}
+
+.clap-flash.fade {
+  opacity: 0;
+  transition: opacity 0.38s ease-out;
+}
+
 #pattern-lineart-canvas {
   position: absolute;
   inset: 0;
