@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { ARTIFACTS, MODEL_ASSET_REVISION } from '../data/artifacts.js';
-import { getViewportSize } from '../utils/viewport.js';
 import { createPlaceholderModel } from './PlaceholderFactory.js';
 import { PointCloudFromModel } from './PointCloudFromModel.js';
 import { loadSceneEnvironment } from './EnvironmentLoader.js';
@@ -34,6 +33,8 @@ export class SceneManager {
     this._clock = new THREE.Clock();
     this._fpsFrames = 0;
     this._fpsLast = performance.now();
+    this._lastGoodSize = { width: 1, height: 1 };
+    this._resizeRetryId = null;
     this._running = false;
     this._rafId = null;
     this._onWindowResize = () => this._onResize();
@@ -82,27 +83,43 @@ export class SceneManager {
 
     this.scene.add(this.modelGroup);
 
-    const stage =
-      this.canvas.closest('#atlas-viewport') ??
-      this.canvas.closest('#stage-column') ??
-      this.canvas.parentElement;
+    const stage = this.canvas.closest('#atlas-viewport');
     this._resizeObserver = new ResizeObserver(() => this._onResize());
     if (stage) this._resizeObserver.observe(stage);
     window.addEventListener('resize', this._onWindowResize);
   }
 
+  /**
+   * 仅测量 #atlas-viewport — 禁止回退到 #stage-column，
+   * 否则纹样版块激活时 column 有尺寸但 viewport 隐藏，会导致 canvas 像素错位白屏
+   */
   _getStageSize() {
-    const viewport = this.canvas.closest('#atlas-viewport') ?? this.canvas.parentElement;
-    const column = this.canvas.closest('#stage-column');
-    for (const el of [viewport, column].filter(Boolean)) {
-      const rect = el.getBoundingClientRect();
-      const width = Math.floor(rect.width);
-      const height = Math.floor(rect.height);
-      if (width > 0 && height > 0) {
-        return { width, height };
-      }
+    const viewport = this.canvas.closest('#atlas-viewport');
+    if (!viewport) return this._lastGoodSize;
+
+    const hidden =
+      viewport.classList.contains('section-hidden') ||
+      viewport.closest('.section-hidden') != null ||
+      getComputedStyle(viewport).display === 'none';
+
+    if (hidden) return this._lastGoodSize;
+
+    const rect = viewport.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    if (width > 0 && height > 0) {
+      this._lastGoodSize = { width, height };
+      return { width, height };
     }
-    return getViewportSize();
+    return this._lastGoodSize;
+  }
+
+  _scheduleResizeRetry() {
+    if (this._resizeRetryId != null) return;
+    this._resizeRetryId = requestAnimationFrame(() => {
+      this._resizeRetryId = null;
+      this._onResize();
+    });
   }
 
   /** 三点布光 + 环境光 */
@@ -394,7 +411,10 @@ export class SceneManager {
 
   _onResize() {
     const { width, height } = this._getStageSize();
-    if (width === 0 || height === 0) return;
+    if (width < 2 || height < 2) {
+      this._scheduleResizeRetry();
+      return;
+    }
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
@@ -455,6 +475,10 @@ export class SceneManager {
     }
 
     this._resizeObserver?.disconnect();
+    if (this._resizeRetryId != null) {
+      cancelAnimationFrame(this._resizeRetryId);
+      this._resizeRetryId = null;
+    }
     window.removeEventListener('resize', this._onWindowResize);
 
     if (this.pointCloud) {

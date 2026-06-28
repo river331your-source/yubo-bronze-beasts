@@ -38,6 +38,8 @@ export class AppRouter {
 
     await this.sections[sectionId].onEnter?.();
 
+    this.ui.logSectionState(`AppRouter.switchSection→${sectionId}`);
+
     const hash = sectionId === 'home' ? '' : `#/${sectionId}`;
     history.replaceState(null, '', location.pathname + location.search + hash);
 

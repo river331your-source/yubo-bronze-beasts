@@ -34,7 +34,12 @@ export class AtlasSection {
       return;
     }
 
+    // 确保图鉴 shell 已显示后再测量 viewport（避免 buffer 0×0 白屏）
+    this.ui.sectionVisibility.showStage('atlas');
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
     this.sceneManager = new SceneManager(this.canvas);
+    this.ui.atlasSceneManager = this.sceneManager;
     this.interactions = {
       deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
       material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
@@ -51,7 +56,8 @@ export class AtlasSection {
     this.ui.logSectionState('AtlasSection.onEnter');
 
     this.sceneManager.resize();
-    requestAnimationFrame(() => this.sceneManager?.resize());
+    await new Promise((r) => requestAnimationFrame(r));
+    this.sceneManager.resize();
 
     this._bindKeyboard();
   // 手势（含摄像头）先完成初始化，再启动 update 循环，避免 gc 为 null
@@ -89,8 +95,8 @@ export class AtlasSection {
 
     this.sceneManager?.dispose();
     this.sceneManager = null;
+    this.ui.atlasSceneManager = null;
 
-    this.ui.hideAllArtifactStages();
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');
   }

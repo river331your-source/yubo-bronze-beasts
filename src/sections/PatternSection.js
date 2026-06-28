@@ -65,7 +65,6 @@ export class PatternSection {
     this.gestureController?.dispose();
     this.gestureController = null;
 
-    this.ui.hideAllArtifactStages();
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');
   }

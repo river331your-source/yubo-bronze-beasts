@@ -8,6 +8,8 @@ import {
   bindRelicSilhouetteFallback,
   resolvePublicAsset,
 } from './relicSilhouetteFallback.js';
+import { SectionVisibility } from '../core/SectionVisibility.js';
+import { logSectionHealth } from '../core/sectionDiagnostics.js';
 
 const GESTURE_LABELS = {
   none: '未检测到手势',
@@ -58,6 +60,10 @@ export class UIController {
 
     this.mainBody = this.mainPage.querySelector('.main-body');
     this.sectionPlaceholder = document.getElementById('section-placeholder');
+
+    /** @type {import('../scene/SceneManager.js').SceneManager | null} */
+    this.atlasSceneManager = null;
+    this.sectionVisibility = new SectionVisibility(this);
 
     this._bindEvents();
     this._buildCarousel();
@@ -143,10 +149,9 @@ export class UIController {
     });
   }
 
-  /** 切换版块可见性（由 AppRouter 调用） */
+  /** 切换版块可见性（由 AppRouter 调用）— 可见性仅经 SectionVisibility 控制 */
   setSection(sectionId) {
-    // 先全部隐藏舞台层，再只打开目标版块（根治残留）
-    this._hideAllArtifactStages();
+    this.sectionVisibility.hideAllStages();
 
     this.currentSection = sectionId;
     this.mainBody?.setAttribute('data-section', sectionId);
@@ -173,71 +178,51 @@ export class UIController {
       this.materialTimeline.hidden = true;
       this.showGestureUI(false);
     } else if (isAtlas) {
+      this.sectionVisibility.showStage('atlas');
       this.currentMode = 'deconstruct';
       this._applySectionHint('atlas', 'deconstruct');
       this.interactionHint.hidden = false;
       this.artifactInfo.hidden = false;
       this.materialTimeline.hidden = true;
-      this._syncArtifactStages();
       this._resetModeCards('deconstruct');
     } else if (isPattern) {
+      this.sectionVisibility.showStage('pattern');
       this._applySectionHint('pattern');
       this.interactionHint.hidden = false;
       this.artifactInfo.hidden = true;
       this.materialTimeline.hidden = true;
-      this._syncArtifactStages();
     }
 
     this.logSectionState('setSection');
   }
 
-  /**
-   * 同步图鉴 WebGL 与纹样线稿层 — 严格按顶部导航隔离，不混用
-   * - 神兽图鉴：仅 #section-atlas + #atlas-viewport（粒子/WebGL）
-   * - 纹样探秘：仅 #section-pattern（线稿）
-   */
+  /** @deprecated 兼容旧调用，内部转 SectionVisibility */
   syncArtifactStages() {
-    this._syncArtifactStages();
+    if (this.currentSection === 'atlas') {
+      this.sectionVisibility.showStage('atlas');
+    } else if (this.currentSection === 'pattern') {
+      this.sectionVisibility.showStage('pattern');
+    } else {
+      this.sectionVisibility.hideAllStages();
+    }
     this.logSectionState('syncArtifactStages');
   }
 
-  _syncArtifactStages() {
-    const isAtlas = this.currentSection === 'atlas';
-    const isPatternNav = this.currentSection === 'pattern';
-
-    this.sectionAtlas?.classList.toggle('section-hidden', !isAtlas);
-    this.atlasViewport?.classList.toggle('section-hidden', !isAtlas);
-    this.sectionPattern?.classList.toggle('section-hidden', !isPatternNav);
-
-    if (!isPatternNav) {
-      this._clearLineartCanvas();
-    }
-
-    this.webglCanvas?.classList.remove('scene-hidden');
-    this.lineartCanvas?.classList.remove('visible');
+  /** @deprecated 兼容旧调用 */
+  hideAllArtifactStages() {
+    this.sectionVisibility.hideAllStages();
   }
 
-  /** 离开文物相关版块时彻底隐藏两层舞台 */
-  hideAllArtifactStages() {
-    this._hideAllArtifactStages();
+  _syncArtifactStages() {
+    this.syncArtifactStages();
   }
 
   _hideAllArtifactStages() {
-    this.sectionAtlas?.classList.add('section-hidden');
-    this.atlasViewport?.classList.add('section-hidden');
-    this.sectionPattern?.classList.add('section-hidden');
-    this._clearLineartCanvas();
-    this.webglCanvas?.classList.remove('scene-hidden');
-    this.lineartCanvas?.classList.remove('visible');
+    this.sectionVisibility.hideAllStages();
   }
 
   _clearLineartCanvas() {
-    const canvas = this.lineartCanvas;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx || canvas.width === 0) return;
-    ctx.fillStyle = '#070A08';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    this.sectionVisibility.clearLineart();
   }
 
   /** 提示语归属版块：atlas 用手势提示，pattern 用手电提示 */
@@ -266,27 +251,9 @@ export class UIController {
     });
   }
 
-  /** 调试：打印当前版块与各容器 display 状态 */
+  /** 调试：版块隔离 + 中央 WebGL 健康状态 */
   logSectionState(source = 'manual') {
-    const cs = (el) => (el ? getComputedStyle(el).display : 'missing');
-    const vis = (el) =>
-      el ? el.classList.contains('section-hidden') : 'missing';
-    console.log(`[版块隔离] ${source}`, {
-      currentSection: this.currentSection,
-      currentMode: this.currentMode,
-      hintSection: this.interactionHint?.dataset.hintSection ?? 'unset',
-      hintPreview: this.interactionHint?.textContent?.slice(0, 28),
-      '#section-atlas': cs(this.sectionAtlas),
-      '#section-atlas.hidden': vis(this.sectionAtlas),
-      '#atlas-viewport': cs(this.atlasViewport),
-      '#atlas-viewport.hidden': vis(this.atlasViewport),
-      '#section-pattern': cs(this.sectionPattern),
-      '#section-pattern.hidden': vis(this.sectionPattern),
-      '#stage-column': cs(this.stageColumn),
-      bothStagesVisible:
-        !this.sectionAtlas?.classList.contains('section-hidden') &&
-        !this.sectionPattern?.classList.contains('section-hidden'),
-    });
+    logSectionHealth(this, this.atlasSceneManager, source);
   }
 
   setActiveNav(navId) {
