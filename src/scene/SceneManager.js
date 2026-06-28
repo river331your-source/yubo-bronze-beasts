@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { ARTIFACTS } from '../data/artifacts.js';
+import { ARTIFACTS, MODEL_ASSET_REVISION } from '../data/artifacts.js';
 import { getViewportSize } from '../utils/viewport.js';
 import { createPlaceholderModel } from './PlaceholderFactory.js';
 import { PointCloudFromModel } from './PointCloudFromModel.js';
@@ -21,6 +21,7 @@ export class SceneManager {
     this.modelContainer.name = 'model-container';
     this.modelGroup.add(this.modelContainer);
     this.loadedModels = new Map();
+    this._modelCacheRevision = MODEL_ASSET_REVISION;
     this.onModelLoaded = null;
     this.pointCloud = null;
     this.envMap = null;
@@ -139,6 +140,12 @@ export class SceneManager {
   }
 
   async loadArtifact(index) {
+    if (this._modelCacheRevision !== MODEL_ASSET_REVISION) {
+      this.loadedModels.clear();
+      this._modelCacheRevision = MODEL_ASSET_REVISION;
+      console.log('[SceneManager] 模型资源已更新，清除 FBX 缓存');
+    }
+
     this.currentIndex = index;
     const artifact = this.artifacts[index];
 

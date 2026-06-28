@@ -1,7 +1,10 @@
 /**
  * 五件河南出土动物形制青铜器数据
- * modelPath: 将 FBX 放入 public/models/{名称}/ 目录
+ * modelPath: FBX 放在 public/models/ 根目录
+ * 更换模型文件后请递增 MODEL_ASSET_REVISION，以清除内存中的旧缓存
  */
+export const MODEL_ASSET_REVISION = 2;
+
 export const ARTIFACTS = [
   {
     id: 'fuhao-xiao-zun',

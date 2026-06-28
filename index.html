@@ -193,7 +193,18 @@
                     stroke-width="1"
                   />
                 </svg>
-                <p class="arc-scroll-hint" aria-hidden="true">滚动切换</p>
+                <!-- 左侧竖排「滚动切换」+ 圆形上一件按钮 -->
+                <div class="arc-scroll-col">
+                  <p class="arc-scroll-hint" aria-hidden="true">滚动切换</p>
+                  <button
+                    type="button"
+                    class="arc-scroll-btn"
+                    id="artifact-prev-btn"
+                    aria-label="上一件文物"
+                  >
+                    <span class="arc-scroll-btn-icon" aria-hidden="true">‹</span>
+                  </button>
+                </div>
                 <div class="arc-nodes" id="artifact-carousel"></div>
               </aside>
 

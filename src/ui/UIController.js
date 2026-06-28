@@ -3,6 +3,14 @@ import {
   DEFAULT_ARTIFACT_INDEX,
   INTERACTION_MODES,
 } from '../data/artifacts.js';
+import relics from '../data/relics.json';
+import {
+  bindRelicSilhouetteFallback,
+  resolvePublicAsset,
+} from './relicSilhouetteFallback.js';
+
+/** 剪影诊断模式：opacity 0.8 + 红框 + 放大。确认可见后改为 false */
+const SILHOUETTE_DEBUG = true;
 
 const GESTURE_LABELS = {
   none: '未检测到手势',
@@ -32,6 +40,7 @@ export class UIController {
     this.webglCanvas = document.getElementById('webgl-canvas');
     this.lineartCanvas = document.getElementById('pattern-lineart-canvas');
     this.carousel = document.getElementById('artifact-carousel');
+    this.artifactPrevBtn = document.getElementById('artifact-prev-btn');
     this.interactionPanel = document.getElementById('interaction-panel');
     this.artifactInfo = document.getElementById('artifact-info');
     this.interactionHint = document.getElementById('interaction-hint');
@@ -78,6 +87,8 @@ export class UIController {
       this.setMode(mode);
     });
 
+    this.artifactPrevBtn?.addEventListener('click', () => this.selectPrevArtifact());
+
     this.mainPage.addEventListener(
       'wheel',
       (e) => {
@@ -98,22 +109,56 @@ export class UIController {
 
   _buildCarousel() {
     if (!this.carousel) return;
+
+    this.artifactNav?.setAttribute(
+      'data-silhouette-debug',
+      SILHOUETTE_DEBUG ? '1' : '0'
+    );
+
+    console.group('[文物剪影] 路径诊断');
     ARTIFACTS.forEach((artifact, index) => {
+      const relic = relics[artifact.id] ?? {};
+      const name = relic.name ?? artifact.name;
+      const era = relic.era ?? artifact.era;
+      const thumbnail = resolvePublicAsset(relic.thumbnail ?? '');
+
+      console.log(`  ${artifact.id}`, {
+        relicJson: relic.thumbnail,
+        resolved: thumbnail,
+        absolute: thumbnail.startsWith('http')
+          ? thumbnail
+          : new URL(thumbnail, window.location.href).href,
+      });
+
       const item = document.createElement('button');
       item.className = `arc-node${index === DEFAULT_ARTIFACT_INDEX ? ' active' : ''}`;
       item.type = 'button';
-      item.dataset.index = index;
-      item.dataset.pos = index;
+      item.dataset.index = String(index);
+      item.dataset.pos = String(index);
       item.innerHTML = `
-        <span class="arc-dot"></span>
-        <span class="arc-label">
-          <span class="arc-name">${artifact.name}</span>
-          <span class="arc-era">（${artifact.era}）</span>
+        <span class="arc-dot" aria-hidden="true"></span>
+        <span class="arc-node-body">
+          <img
+            class="arc-silhouette"
+            src="${thumbnail}"
+            alt=""
+            decoding="async"
+            draggable="false"
+          />
+          <span class="arc-label">
+            <span class="arc-name">${name}</span>
+            <span class="arc-era">${era}</span>
+          </span>
         </span>
       `;
       item.addEventListener('click', () => this.selectArtifact(index));
+      const silhouette = item.querySelector('.arc-silhouette');
+      if (silhouette) {
+        bindRelicSilhouetteFallback(silhouette, { id: artifact.id, src: thumbnail });
+      }
       this.carousel.appendChild(item);
     });
+    console.groupEnd();
   }
 
   /** 切换版块可见性（由 AppRouter 调用） */
@@ -308,6 +353,12 @@ export class UIController {
       item.classList.toggle('loading', i === index && item.dataset.loading === 'true');
     });
     this.onArtifactSelect?.(index);
+  }
+
+  /** 圆形按钮：切换到上一件（循环） */
+  selectPrevArtifact() {
+    const prev = (this.currentArtifactIndex - 1 + ARTIFACTS.length) % ARTIFACTS.length;
+    this.selectArtifact(prev);
   }
 
   setArtifactLoading(index, loading) {

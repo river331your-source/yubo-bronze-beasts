@@ -1,13 +1,22 @@
 # 3D 模型资源
 
-五个 FBX 文件直接放在此目录，与 `src/data/artifacts.js` 中 `modelPath` 对应。
+五个 FBX 文件直接放在此目录，与 `src/data/artifacts.js` 中 `modelPath` 一一对应。
 
-| 文件名 | 文物 | 时代与出土地 | 尺寸 |
-|--------|------|--------------|------|
-| `妇好鸮尊.fbx` | 妇好鸮尊 | 商代晚期，安阳殷墟妇好墓 | 通高 46.3 厘米 |
-| `青铜神兽.fbx` | 青铜神兽 | 春秋晚期楚国，淅川徐家岭9号楚墓 | 通高 48 厘米 |
-| `兽面纹铜方觥.fbx` | 兽面纹铜方觥 | 西周，鹿邑县长子口墓 | 通高 15 厘米 |
-| `蟠龙纹铜盉.fbx` | 蟠龙纹铜盉 | 西周，三门峡虢国墓地虢季墓 | 通高 22.6 厘米 |
-| `匍雁铜盉.fbx` | 「匍」雁铜盉 | 西周，平顶山应国墓地 | 通高 25.2 厘米 |
+**更换模型后**：递增 `artifacts.js` 里的 `MODEL_ASSET_REVISION`，并运行 `node scripts/verify-all-fbx-parts.mjs` 核对分件名。
 
-加载时会自动 Box3 缩放居中，并应用青铜材质。
+| 文件名 | 文物 | FBX 分件（Group/Mesh 名） |
+|--------|------|---------------------------|
+| `妇好鸮尊.fbx` | 妇好鸮尊 | `lid`, `body` |
+| `青铜神兽.fbx` | 青铜神兽 | `head`, `body`, `feet`, `back` |
+| `兽面纹铜方觥.fbx` | 兽面纹铜方觥 | `lid`, `body` |
+| `蟠龙纹铜盉.fbx` | 蟠龙纹铜盉 | `spout`, `lid`, `body` |
+| `匍雁铜盉.fbx` | 「匍」雁铜盉 | `lid`, `body` |
+
+加载时会自动 Box3 缩放居中，并应用青铜 PBR 材质。
+
+## 诊断脚本
+
+```bash
+node scripts/scan-all-fbx.mjs          # 打印层级与包围盒
+node scripts/verify-all-fbx-parts.mjs  # 核对解构分件是否匹配
+```

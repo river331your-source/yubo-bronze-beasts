@@ -52,7 +52,6 @@ export const deconstructConfigs = {
     parts: {
       lid: { dir: [0, 0.25, 0.05] },
       body: { mode: 'radial', amount: 0.08 },
-      foot: { dir: [0, -0.2, 0] },
     },
   },
   panlong_hu: {
@@ -60,15 +59,12 @@ export const deconstructConfigs = {
       lid: { dir: [0, 0.25, 0] },
       spout: { dir: [-0.25, 0.05, 0] },
       body: { mode: 'radial', amount: 0.08 },
-      feet: { mode: 'legs', spread: 0.2, sink: 0.2 },
     },
   },
   fu_yan_hu: {
     parts: {
-      head_spout: { dir: [0.15, 0.25, 0.2] },
       lid: { dir: [0, 0.15, 0] },
       body: { mode: 'radial', amount: 0.08 },
-      feet: { mode: 'legs', spread: 0.2, sink: 0.2 },
     },
   },
 };
