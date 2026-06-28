@@ -1,7 +1,7 @@
 import { GestureController } from '../interactions/GestureController.js';
 import { PatternFlashlightInteraction } from '../interactions/PatternFlashlightInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
-import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS, INTERACTION_MODES } from '../data/artifacts.js';
+import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
 
 /** 纹样探秘：母题线稿 + 手电筒手势（独立 WebGL / 摄像头生命周期） */
 export class PatternSection {
@@ -20,7 +20,8 @@ export class PatternSection {
     this._onKeydown = null;
   }
 
-  async start() {
+  /** onEnter: 线稿视图 + 手电筒手势 */
+  async onEnter() {
     if (this.active) return;
     this.active = true;
 
@@ -32,15 +33,15 @@ export class PatternSection {
 
     this.ui.selectArtifact(this.artifactIndex);
     this.ui.updateArtifactInfo(ARTIFACTS[this.artifactIndex]);
-    this.ui.interactionHint.hidden = false;
-    this.ui.interactionHint.textContent = INTERACTION_MODES.pattern.hint;
+    this.ui.syncArtifactStages();
 
     this._startInteractionLoop();
     this._bindKeyboard();
     await this._startGesture();
   }
 
-  stop() {
+  /** onLeave: 停止检测循环、关闭摄像头 */
+  onLeave() {
     if (!this.active) return;
     this.active = false;
 
@@ -64,8 +65,7 @@ export class PatternSection {
     this.gestureController?.dispose();
     this.gestureController = null;
 
-    this.lineartCanvas.classList.remove('visible');
-
+    this.ui.hideAllArtifactStages();
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');
   }

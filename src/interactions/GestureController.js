@@ -17,6 +17,9 @@ export class GestureController {
 
     this.currentGesture = 'none';
     this.handsDistance = 0;
+
+    // 转手旋转：上一帧手掌朝向角（手腕→中指根），用于帧间增量
+    this._prevTwistAngle = null;
   }
 
   async init() {
@@ -62,6 +65,7 @@ export class GestureController {
     const hands = results.landmarks ?? [];
 
     if (hands.length === 0) {
+      this._prevTwistAngle = null;
       this._emitGesture('none');
       this._emitHandsDistance(0);
       return;
@@ -140,28 +144,84 @@ export class GestureController {
     }
   }
 
-  /** 返回 0~1 手掌张开程度（用于连续解构进度） */
+  /** 掌心参考点：腕 + 四指 MCP 均值 */
+  _getPalmCenter(lm) {
+    const ids = [0, 5, 9, 13, 17];
+    let x = 0;
+    let y = 0;
+    ids.forEach((i) => {
+      x += lm[i].x;
+      y += lm[i].y;
+    });
+    return { x: x / ids.length, y: y / ids.length };
+  }
+
+  /**
+   * 【张合控制拆解】返回 0~1 手掌张开程度
+   * 五指指尖到掌心的平均距离，连续映射：距离小→握拳(0)，距离大→张开(1)
+   */
   getHandOpenness() {
     const lm = this.lastResults?.landmarks?.[0];
     if (!lm) return null;
 
-    const wrist = lm[0];
+    const palm = this._getPalmCenter(lm);
     const tips = [4, 8, 12, 16, 20];
-    const mcp = [2, 5, 9, 13, 17];
-
-    let extended = 0;
-    tips.forEach((tipIdx, i) => {
-      const tip = lm[tipIdx];
-      const base = lm[mcp[i]];
-      const distTip = this._dist2d(tip, wrist);
-      const distBase = this._dist2d(base, wrist);
-      if (i === 0 ? tip.x < lm[3].x : distTip > distBase * 1.15) extended++;
+    let avgTipDist = 0;
+    tips.forEach((i) => {
+      avgTipDist += this._dist2d(lm[i], palm);
     });
+    avgTipDist /= tips.length;
 
-    return extended / 5;
+    // 以腕→中指根距离为手尺度，归一化到 0~1
+    const handScale = Math.max(this._dist2d(lm[0], lm[9]), 0.04);
+    const ratio = avgTipDist / handScale;
+    const openMin = 0.38;
+    const openMax = 1.05;
+    return Math.min(1, Math.max(0, (ratio - openMin) / (openMax - openMin)));
   }
 
-  /** 手掌追踪 → 模型 rotation（归一化屏幕 + 弧度） */
+  /**
+   * 【旋转控制视角】手腕→中指根向量在屏幕平面的朝向角
+   * 返回本帧相对上一帧的角度增量（弧度）；手不动则 delta≈0
+   */
+  _calcTwistAngle(lm) {
+    const wrist = lm[0];
+    const middleMcp = lm[9];
+    const dx = middleMcp.x - wrist.x;
+    const dy = middleMcp.y - wrist.y;
+    return Math.atan2(dx, -dy);
+  }
+
+  /**
+   * 【旋转控制视角】帧间手掌旋转增量
+   * 手往左转 delta>0，往右转 delta<0（前置摄像头镜像后仍符合直觉）
+   */
+  getHandTwistDelta() {
+    const lm = this.lastResults?.landmarks?.[0];
+    if (!lm) return null;
+
+    const angle = this._calcTwistAngle(lm);
+
+    if (this._prevTwistAngle === null) {
+      this._prevTwistAngle = angle;
+      return { delta: 0, angle };
+    }
+
+    let delta = angle - this._prevTwistAngle;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+
+    this._prevTwistAngle = angle;
+
+    // 死区：抑制握拳/微抖引起的角度噪声
+    const deadZone = 0.006;
+    if (Math.abs(delta) < deadZone) delta = 0;
+
+    // 前置摄像头 x 轴镜像：取反使「手左转→模型左转」
+    return { delta: -delta, angle };
+  }
+
+  /** 手掌位置追踪 → 绝对 rotation（纹样/鼠标回退等场景保留） */
   getHandTrackTransform() {
     const lm = this.lastResults?.landmarks?.[0];
     if (!lm) return null;
@@ -206,6 +266,7 @@ export class GestureController {
     this.landmarker = null;
     this.lastResults = null;
     this.currentGesture = 'none';
+    this._prevTwistAngle = null;
 
     const stream = this.videoEl.srcObject;
     if (stream) {

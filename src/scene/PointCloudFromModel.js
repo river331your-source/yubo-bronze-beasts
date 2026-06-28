@@ -267,6 +267,8 @@ export class PointCloudFromModel {
     this._handRotX = 0;
     this._handRotY = 0;
     this._baseRotY = 0;
+    /** 解构手势模式下关闭自动慢转，转手停则模型停 */
+    this._autoSpin = true;
     /** 质心锚点降频：每 3 帧重算一次 */
     this._centroidFrame = 0;
     this._partCentroidsLocal = {};
@@ -474,7 +476,7 @@ export class PointCloudFromModel {
   /**
    * MediaPipe接入点：握拳 → setDeconstructState(0) / 'cloud'
    * MediaPipe接入点：张开程度(0~1) → progress×MAX_DECONSTRUCT 连续解构
-   * MediaPipe接入点：手掌移动 → setHandRotation(rx, ry)
+   * MediaPipe接入点：转手增量 → setHandRotation(0, ry) 仅 Y 轴，与 progress 解耦
    */
   setDeconstructState(value) {
     const maxDec = this.config?.MAX_DECONSTRUCT ?? 0.8;
@@ -508,6 +510,12 @@ export class PointCloudFromModel {
     this._handRotY = rotY;
   }
 
+  /** 是否启用粒子系统自动慢转（解构手势交互时应关闭） */
+  setAutoSpin(enabled) {
+    this._autoSpin = enabled;
+    if (!enabled) this._baseRotY = 0;
+  }
+
   update(dt) {
     if (!this.points || !this.geometry) return;
     this.time += dt;
@@ -518,7 +526,7 @@ export class PointCloudFromModel {
     const p = smoothstep(this.progress);
     this.material.opacity = THREE.MathUtils.lerp(0.92, 0.72, p);
     this.points.visible = !this.meshVisible || this.progress > 0.02;
-    this._baseRotY += dt * 0.12;
+    if (this._autoSpin) this._baseRotY += dt * 0.12;
     this.points.rotation.x = this._handRotX;
     this.points.rotation.y = this._handRotY + this._baseRotY;
 

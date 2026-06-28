@@ -71,24 +71,47 @@ body {
 }
 
 .page {
-  display: none;
   width: 100%;
   height: 100%;
   position: relative;
 }
 
-.page.active {
+/* ===== HOME 版块（原首页内容） ===== */
+
+#section-home {
+  grid-column: 1 / -1;
+  position: relative;
   display: flex;
-}
-
-/* ===== 首页 ===== */
-
-#landing-page {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--ink-black);
   overflow: hidden;
+  min-height: 0;
+  height: 100%;
+  background: var(--ink-black);
+}
+
+#section-home.section-hidden {
+  display: none !important;
+}
+
+.main-body[data-section='home'] {
+  grid-template-columns: 1fr;
+}
+
+.main-body[data-section='craft'] .section-placeholder,
+.main-body[data-section='story'] .section-placeholder {
+  grid-column: 1 / -1;
+}
+
+#section-home .landing-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 24px 90px 0;
 }
 
 /* 背景兽面纹暗纹 */
@@ -118,6 +141,9 @@ body {
   background: #2a1f0a;
   z-index: 1;
   opacity: 0;
+}
+
+#section-home.home-animate .landing-vline {
   animation: landing-decor-in 1s ease forwards;
 }
 
@@ -139,9 +165,12 @@ body {
   letter-spacing: 0.35em;
   z-index: 1;
   opacity: 0;
-  animation: landing-decor-in 1s ease forwards;
   pointer-events: none;
   user-select: none;
+}
+
+#section-home.home-animate .landing-vert-text {
+  animation: landing-decor-in 1s ease forwards;
 }
 
 .landing-vert-text-left {
@@ -250,13 +279,16 @@ body {
 }
 
 .landing-title-img {
-  width: 65vw;
+  width: min(65vw, 720px);
   max-width: 900px;
   height: auto;
   display: block;
   margin-bottom: 20px;
   opacity: 0;
   transform: translateY(10px);
+}
+
+#section-home.home-animate .landing-title-img {
   animation: landing-title-in 1.5s ease forwards 1s;
 }
 
@@ -273,6 +305,9 @@ body {
 
 .landing-copy {
   opacity: 0;
+}
+
+#section-home.home-animate .landing-copy {
   animation: landing-copy-in 0.5s ease forwards 2.5s;
 }
 
@@ -311,6 +346,9 @@ body {
   border: none;
   cursor: pointer;
   opacity: 0;
+}
+
+#section-home.home-animate .enter-btn {
   animation: landing-btn-in 0.5s ease forwards 3s;
 }
 
@@ -388,17 +426,12 @@ body {
   --footer-h: 52px;
   --col-left: 280px;
   --col-right: 300px;
-  display: none;
+  display: grid;
+  grid-template-rows: var(--header-h) 1fr var(--footer-h);
   background: var(--ink-black);
   height: 100%;
   position: relative;
   overflow: hidden;
-}
-
-#main-page.active {
-  display: grid;
-  grid-template-rows: var(--header-h) 1fr var(--footer-h);
-  height: 100%;
 }
 
 .main-vignette {
@@ -626,12 +659,36 @@ body {
   display: none !important;
 }
 
-#section-atlas {
-  display: contents;
+/* 中央舞台列：叠放图鉴 WebGL 与纹样线稿两层 */
+.stage-column {
+  position: relative;
+  background: var(--ink-black);
+  min-width: 0;
+  overflow: hidden;
 }
 
-#section-atlas.section-hidden {
-  display: none !important;
+.stage-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.stage-overlays .camera-pip,
+.stage-overlays .interaction-hint,
+.stage-overlays .gesture-status {
+  pointer-events: auto;
+}
+
+#section-atlas.scene-stage--atlas,
+#section-pattern.scene-stage--pattern {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+#section-pattern.scene-stage--pattern {
+  z-index: 2;
 }
 
 .section-placeholder {
@@ -905,13 +962,8 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 2;
-  transition: opacity 0.4s ease;
-}
-
-#webgl-canvas.scene-hidden {
-  opacity: 0;
-  pointer-events: none;
+  z-index: 1;
+  display: block;
 }
 
 #pattern-lineart-canvas {
@@ -919,16 +971,9 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 3;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.4s ease;
+  z-index: 1;
+  display: block;
   cursor: crosshair;
-}
-
-#pattern-lineart-canvas.visible {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .model-loading {

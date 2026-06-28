@@ -25,18 +25,12 @@ export class AtlasSection {
     this._onKeydown = null;
   }
 
-  async start() {
+  /** onEnter: 创建 Three.js 场景、加载 FBX、启用手势与解构交互 */
+  async onEnter() {
     if (this.active) return;
     this.active = true;
 
-    const atlasRoot = document.getElementById('section-atlas');
-    console.log('[AtlasSection] mount', {
-      sectionAtlas: atlasRoot,
-      canvas: this.canvas,
-      canvasParent: this.canvas?.parentElement?.className,
-    });
-
-    if (!atlasRoot || !this.canvas) {
+    if (!document.getElementById('section-atlas') || !this.canvas) {
       console.error('[AtlasSection] 容器缺失，无法初始化');
       return;
     }
@@ -52,16 +46,16 @@ export class AtlasSection {
       material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
     };
 
-    console.log('[AtlasSection] 开始加载 FBX…');
     await this.sceneManager.loadArtifact(DEFAULT_ARTIFACT_INDEX);
     const artifact = this.sceneManager.getCurrentArtifact();
-    console.log('[AtlasSection] FBX 就绪:', artifact?.name);
 
     this.ui.selectArtifact(DEFAULT_ARTIFACT_INDEX);
     this.ui.updateArtifactInfo(artifact);
     this.ui.setMode('deconstruct');
     this.currentMode = 'deconstruct';
     this.switchMode('deconstruct');
+    this.ui.syncArtifactStages();
+    this.ui.logSectionState('AtlasSection.onEnter');
 
     this.sceneManager.resize();
     requestAnimationFrame(() => this.sceneManager?.resize());
@@ -71,7 +65,8 @@ export class AtlasSection {
     await this._startGesture();
   }
 
-  stop() {
+  /** onLeave: 停止 rAF、释放 WebGL、关闭摄像头 */
+  onLeave() {
     if (!this.active) return;
     this.active = false;
 
@@ -101,6 +96,7 @@ export class AtlasSection {
     this.sceneManager?.dispose();
     this.sceneManager = null;
 
+    this.ui.hideAllArtifactStages();
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');
   }
@@ -110,6 +106,7 @@ export class AtlasSection {
     Object.values(this.interactions).forEach((i) => i.deactivate?.());
     this.currentMode = mode;
     this.interactions[mode].activate?.();
+    this.ui.syncArtifactStages();
   }
 
   async loadArtifact(index) {

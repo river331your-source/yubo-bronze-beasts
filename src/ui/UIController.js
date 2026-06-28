@@ -17,11 +17,16 @@ const ARTIFACT_SECTIONS = new Set(['atlas', 'pattern']);
 
 export class UIController {
   constructor() {
-    this.landingPage = document.getElementById('landing-page');
     this.mainPage = document.getElementById('main-page');
     this.enterBtn = document.getElementById('enter-btn');
     this.siteBrand = document.getElementById('site-brand');
+    this.sectionHome = document.getElementById('section-home');
+    this.artifactNav = document.getElementById('artifact-nav');
+    this.stageColumn = document.getElementById('stage-column');
     this.sectionAtlas = document.getElementById('section-atlas');
+    this.sectionPattern = document.getElementById('section-pattern');
+    this.webglCanvas = document.getElementById('webgl-canvas');
+    this.lineartCanvas = document.getElementById('pattern-lineart-canvas');
     this.carousel = document.getElementById('artifact-carousel');
     this.interactionPanel = document.getElementById('interaction-panel');
     this.artifactInfo = document.getElementById('artifact-info');
@@ -37,40 +42,22 @@ export class UIController {
     this.currentArtifactIndex = DEFAULT_ARTIFACT_INDEX;
     this.onModeChange = null;
     this.onArtifactSelect = null;
-    this.onEnterMain = null;
-    this.onLeaveMain = null;
     this.onNavSelect = null;
-    this.currentSection = null;
+    this.currentSection = 'home';
 
     this.mainBody = this.mainPage.querySelector('.main-body');
     this.sectionPlaceholder = document.getElementById('section-placeholder');
-
-    console.log('[UIController] init', {
-      sectionAtlas: this.sectionAtlas,
-      carousel: this.carousel,
-      interactionPanel: this.interactionPanel,
-    });
 
     this._bindEvents();
     this._buildCarousel();
   }
 
   _bindEvents() {
-    this.enterBtn.addEventListener('click', async () => {
-      await this.showMain();
-      this.onEnterMain?.();
-    });
-
-    this.siteBrand?.addEventListener('click', () => this.showLanding());
+    this.siteBrand?.addEventListener('click', () => this.onNavSelect?.('home'));
 
     this.mainPage.querySelectorAll('.site-nav-item[data-nav]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.dataset.nav;
-        if (id === 'home') {
-          this.showLanding();
-        } else {
-          this.onNavSelect?.(id);
-        }
+        this.onNavSelect?.(btn.dataset.nav);
       });
     });
 
@@ -83,7 +70,6 @@ export class UIController {
     this.mainPage.addEventListener(
       'wheel',
       (e) => {
-        if (!this.mainPage.classList.contains('active')) return;
         if (!ARTIFACT_SECTIONS.has(this.currentSection)) return;
         if (Math.abs(e.deltaY) < 20) return;
         e.preventDefault();
@@ -100,10 +86,7 @@ export class UIController {
   }
 
   _buildCarousel() {
-    if (!this.carousel) {
-      console.error('[UIController] #artifact-carousel 未找到');
-      return;
-    }
+    if (!this.carousel) return;
     ARTIFACTS.forEach((artifact, index) => {
       const item = document.createElement('button');
       item.className = `arc-node${index === DEFAULT_ARTIFACT_INDEX ? ' active' : ''}`;
@@ -122,45 +105,19 @@ export class UIController {
     });
   }
 
-  showMain() {
-    return new Promise((resolve) => {
-      this.landingPage.classList.add('page-exit');
-      setTimeout(() => {
-        this.landingPage.classList.remove('active', 'page-exit');
-        this.mainPage.classList.add('active', 'page-enter');
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            this.mainPage.classList.remove('page-enter');
-            resolve();
-          }, 100);
-        });
-      }, 420);
-    });
-  }
-
-  showLanding() {
-    this.onLeaveMain?.();
-    this.setSection(null);
-    this.setActiveNav(null);
-    this.mainPage.classList.add('page-exit');
-    setTimeout(() => {
-      this.mainPage.classList.remove('active', 'page-exit');
-      this.landingPage.classList.add('active', 'page-enter');
-      requestAnimationFrame(() => {
-        setTimeout(() => this.landingPage.classList.remove('page-enter'), 600);
-      });
-    }, 420);
-  }
-
+  /** 切换版块可见性（由 AppRouter 调用） */
   setSection(sectionId) {
     this.currentSection = sectionId;
-    this.mainBody?.setAttribute('data-section', sectionId ?? 'none');
+    this.mainBody?.setAttribute('data-section', sectionId);
 
+    const isHome = sectionId === 'home';
     const isAtlas = sectionId === 'atlas';
     const isPattern = sectionId === 'pattern';
     const isArtifact = ARTIFACT_SECTIONS.has(sectionId);
 
-    this.sectionAtlas?.classList.toggle('section-hidden', !isArtifact);
+    this.sectionHome?.classList.toggle('section-hidden', !isHome);
+    this.artifactNav?.classList.toggle('section-hidden', !isArtifact);
+    this.stageColumn?.classList.toggle('section-hidden', !isArtifact);
     this.interactionPanel?.classList.toggle('section-hidden', !isAtlas);
     this.hidePlaceholder();
 
@@ -171,36 +128,100 @@ export class UIController {
       );
     }
 
-    const webgl = document.getElementById('webgl-canvas');
-    const lineart = document.getElementById('pattern-lineart-canvas');
-
-    if (isAtlas) {
-      this.interactionHint.hidden = false;
-      this.artifactInfo.hidden = false;
-      webgl?.classList.remove('scene-hidden');
-      lineart?.classList.remove('visible');
-    } else if (isPattern) {
-      this.interactionHint.hidden = false;
-      this.interactionHint.textContent = INTERACTION_MODES.pattern.hint;
-      this.artifactInfo.hidden = false;
-      webgl?.classList.add('scene-hidden');
-    } else {
+    if (isHome || isPlaceholderSection(sectionId)) {
+      this._hideAllArtifactStages();
       this.interactionHint.hidden = true;
       this.artifactInfo.hidden = true;
       this.materialTimeline.hidden = true;
-      webgl?.classList.remove('scene-hidden');
-      lineart?.classList.remove('visible');
+      this.showGestureUI(false);
+    } else if (isAtlas) {
+      this.currentMode = 'deconstruct';
+      this._applyModeHint('deconstruct');
+      this.interactionHint.hidden = false;
+      this.artifactInfo.hidden = false;
+      this.materialTimeline.hidden = true;
+      this._syncArtifactStages();
+      this._resetModeCards('deconstruct');
+    } else if (isPattern) {
+      this._applyModeHint('pattern');
+      this.interactionHint.hidden = false;
+      this.artifactInfo.hidden = false;
+      this.materialTimeline.hidden = true;
+      this._syncArtifactStages();
     }
 
-    console.log('[UIController] setSection', sectionId, {
-      atlasVisible: !this.sectionAtlas?.classList.contains('section-hidden'),
-      panelVisible: !this.interactionPanel?.classList.contains('section-hidden'),
+    this.logSectionState('setSection');
+  }
+
+  /**
+   * 同步图鉴 WebGL 层与纹样线稿层的显示
+   * - 神兽图鉴导航：默认 WebGL；切到「纹样探秘」模式卡时显示线稿
+   * - 纹样探秘导航：仅线稿层
+   */
+  syncArtifactStages() {
+    this._syncArtifactStages();
+    this.logSectionState('syncArtifactStages');
+  }
+
+  _syncArtifactStages() {
+    const isAtlas = this.currentSection === 'atlas';
+    const isPatternNav = this.currentSection === 'pattern';
+    const atlasPatternMode = isAtlas && this.currentMode === 'pattern';
+
+    const showWebgl = isAtlas && !atlasPatternMode;
+    const showLineart = isPatternNav || atlasPatternMode;
+
+    this.sectionAtlas?.classList.toggle('section-hidden', !showWebgl);
+    this.sectionPattern?.classList.toggle('section-hidden', !showLineart);
+
+    // 清理旧版 class 泄漏（opacity 叠层曾导致白屏）
+    this.webglCanvas?.classList.remove('scene-hidden');
+    this.lineartCanvas?.classList.remove('visible');
+  }
+
+  /** 离开文物相关版块时彻底隐藏两层舞台 */
+  hideAllArtifactStages() {
+    this._hideAllArtifactStages();
+  }
+
+  _hideAllArtifactStages() {
+    this.sectionAtlas?.classList.add('section-hidden');
+    this.sectionPattern?.classList.add('section-hidden');
+    this.webglCanvas?.classList.remove('scene-hidden');
+    this.lineartCanvas?.classList.remove('visible');
+  }
+
+  _applyModeHint(mode) {
+    const config = INTERACTION_MODES[mode];
+    if (config && this.interactionHint) {
+      this.interactionHint.textContent = config.hint;
+    }
+  }
+
+  _resetModeCards(mode) {
+    this.interactionPanel?.querySelectorAll('.mode-card[data-mode]').forEach((card) => {
+      card.classList.toggle('active', card.dataset.mode === mode);
+    });
+  }
+
+  /** 调试：打印当前版块与各容器 display 状态 */
+  logSectionState(source = 'manual') {
+    const cs = (el) => (el ? getComputedStyle(el).display : 'missing');
+    console.log(`[版块隔离] ${source}`, {
+      currentSection: this.currentSection,
+      currentMode: this.currentMode,
+      '#section-atlas': cs(this.sectionAtlas),
+      '#section-pattern': cs(this.sectionPattern),
+      '#stage-column': cs(this.stageColumn),
+      '#artifact-nav': cs(this.artifactNav),
+      '#interaction-panel': cs(this.interactionPanel),
+      hint: this.interactionHint?.textContent?.slice(0, 24),
     });
   }
 
   setActiveNav(navId) {
     this.mainPage.querySelectorAll('.site-nav-item[data-nav]').forEach((btn) => {
-      btn.classList.toggle('active', navId != null && btn.dataset.nav === navId);
+      btn.classList.toggle('active', btn.dataset.nav === navId);
     });
   }
 
@@ -220,15 +241,18 @@ export class UIController {
 
   setMode(mode) {
     this.currentMode = mode;
-    this.interactionPanel?.querySelectorAll('.mode-card[data-mode]').forEach((card) => {
-      card.classList.toggle('active', card.dataset.mode === mode);
-    });
+    this._resetModeCards(mode);
     const config = INTERACTION_MODES[mode];
     if (config) {
-      this.interactionHint.textContent = config.hint;
+      this._applyModeHint(mode);
       this.interactionHint.hidden = false;
     }
     this.materialTimeline.hidden = mode !== 'material';
+
+    if (this.currentSection === 'atlas') {
+      this._syncArtifactStages();
+    }
+
     this.onModeChange?.(mode);
   }
 

@@ -52,10 +52,7 @@ export class PatternFlashlightInteraction {
 
   activate() {
     this.active = true;
-
-    this.webglCanvas?.classList.add('scene-hidden');
-    this.lineartCanvas.classList.add('visible');
-
+    // 舞台可见性由 UIController.syncArtifactStages 统一管理
     const artifact = this.getArtifact();
     if (artifact) this.lineartView.setArtifact(artifact);
     this.lineartView.render(null);
@@ -66,9 +63,7 @@ export class PatternFlashlightInteraction {
     this.flashlightOn = false;
     this._gestureFlashlight = false;
     this.flashNorm = null;
-
-    this.webglCanvas?.classList.remove('scene-hidden');
-    this.lineartCanvas.classList.remove('visible');
+    this.lineartView.render(null);
   }
 
   onGesture(gesture) {

@@ -7,13 +7,15 @@ export class PlaceholderSection {
     this.active = false;
   }
 
-  async start() {
+  /** onEnter: 显示占位内容 */
+  async onEnter() {
     if (this.active) return;
     this.active = true;
     this.ui.showPlaceholder(this.title, this.subtitle);
   }
 
-  stop() {
+  /** onLeave: 隐藏占位 */
+  onLeave() {
     if (!this.active) return;
     this.active = false;
     this.ui.hidePlaceholder();
