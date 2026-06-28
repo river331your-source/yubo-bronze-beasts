@@ -91,6 +91,10 @@ body {
   overflow: hidden;
   min-height: 0;
   height: 100%;
+  /* 兽面纹：略提亮、略放大，标题后「神兽显形」感更强 */
+  --home-taotie-size: 65vw;
+  --home-taotie-max: 980px;
+  --home-taotie-opacity: 0.55;
 }
 
 #section-home.section-hidden {
@@ -131,8 +135,8 @@ body {
 .home-layer--taotie[data-home-missing='taotie']::before {
   content: '';
   position: absolute;
-  width: 60vw;
-  max-width: 920px;
+  width: var(--home-taotie-size);
+  max-width: var(--home-taotie-max);
   aspect-ratio: 1;
   border-radius: 50%;
   background: radial-gradient(
@@ -151,8 +155,8 @@ body {
 }
 
 .home-taotie-img {
-  width: 60vw;
-  max-width: 920px;
+  width: var(--home-taotie-size);
+  max-width: var(--home-taotie-max);
   height: auto;
   opacity: 0;
   mix-blend-mode: screen;
@@ -168,7 +172,7 @@ body {
     opacity: 0;
   }
   to {
-    opacity: 0.5;
+    opacity: var(--home-taotie-opacity);
   }
 }
 
@@ -596,8 +600,8 @@ body {
 }
 
 @media (max-width: 768px) {
-  .home-taotie-img {
-    width: 78vw;
+  #section-home {
+    --home-taotie-size: 82vw;
   }
 
   .home-title-img {
