@@ -37,7 +37,7 @@ export class UIController {
     this.atlasViewport = document.getElementById('atlas-viewport');
     this.sectionPattern = document.getElementById('section-pattern');
     this.webglCanvas = document.getElementById('webgl-canvas');
-    this.lineartCanvas = document.getElementById('pattern-lineart-canvas');
+    this.patternTorchStage = document.getElementById('pattern-torch-stage');
     this.carousel = document.getElementById('artifact-carousel');
     this.artifactPrevBtn = document.getElementById('artifact-prev-btn');
     this.artifactInfo = document.getElementById('artifact-info');

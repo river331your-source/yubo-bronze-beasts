@@ -1,124 +1,124 @@
-import { PatternLineartView } from '../ui/PatternLineartView.js';
+/** 默认器物线稿（后续可按文物切换 src） */
+const DEFAULT_LINEART_SRC = '/patterns/artifacts/shenshou_lines.png';
 
 /**
- * 纹样探秘 · 线稿版
- * 👌 手势 / 鼠标移动 → 手电筒照亮线稿纹样 → 照中处泛出吉金光
+ * 纹样探秘 · 器物线稿手电筒
+ * 双层叠加（暗层 + 染金层）+ CSS mask 遮罩跟随鼠标/触屏/手势
  */
 export class PatternFlashlightInteraction {
-  constructor({ lineartCanvas, getArtifact, webglCanvas = null }) {
-    this.getArtifact = getArtifact;
-    this.webglCanvas = webglCanvas;
-    this.lineartView = new PatternLineartView(lineartCanvas);
-    this.lineartCanvas = lineartCanvas;
+  /**
+   * @param {{ stageEl: HTMLElement, getArtifact?: () => object | null }} opts
+   */
+  constructor({ stageEl, getArtifact }) {
+    this.stageEl = stageEl;
+    this.getArtifact = getArtifact ?? (() => null);
+
+    this.dimLayer = stageEl.querySelector('.pattern-lineart--dim');
+    this.goldLayer = stageEl.querySelector('.pattern-lineart--gold');
 
     this.active = false;
-    this.flashlightOn = false;
-    this.flashNorm = null;
-    this._mouseNorm = null;
-    this._mouseDown = false;
+    this._torchVisible = false;
     this._gestureFlashlight = false;
 
     this._onMouseMove = (e) => {
       if (!this.active) return;
-      this._mouseNorm = this.lineartView.pixelToNorm(e.clientX, e.clientY);
-      if (this._mouseDown) this.flashlightOn = true;
+      this._setTorchFromClient(e.clientX, e.clientY);
     };
-    this._onMouseDown = () => {
-      if (!this.active) return;
-      this._mouseDown = true;
-      this.flashlightOn = true;
+    this._onTouchMove = (e) => {
+      if (!this.active || e.touches.length === 0) return;
+      const t = e.touches[0];
+      this._setTorchFromClient(t.clientX, t.clientY);
     };
-    this._onMouseUp = () => {
-      this._mouseDown = false;
-      if (!this._gestureFlashlight) this.flashlightOn = false;
-    };
-    this._onMouseLeave = () => {
-      this._mouseNorm = null;
-      if (!this._gestureFlashlight) {
-        this.flashlightOn = false;
-      }
+    this._onPointerLeave = () => {
+      if (!this.active || this._gestureFlashlight) return;
+      this._hideTorch();
     };
 
-    lineartCanvas.addEventListener('mousemove', this._onMouseMove);
-    lineartCanvas.addEventListener('mousedown', this._onMouseDown);
-    lineartCanvas.addEventListener('mouseup', this._onMouseUp);
-    lineartCanvas.addEventListener('mouseleave', this._onMouseLeave);
-  }
-
-  setArtifact(artifact) {
-    this.lineartView.setArtifact(artifact);
-    this.lineartView.render(this.flashNorm);
+    stageEl.addEventListener('mousemove', this._onMouseMove);
+    stageEl.addEventListener('touchmove', this._onTouchMove, { passive: true });
+    stageEl.addEventListener('mouseleave', this._onPointerLeave);
+    stageEl.addEventListener('touchend', this._onPointerLeave);
+    stageEl.addEventListener('touchcancel', this._onPointerLeave);
   }
 
   activate() {
     this.active = true;
-    // 舞台可见性由 UIController.syncArtifactStages 统一管理
     const artifact = this.getArtifact();
-    if (artifact) this.lineartView.setArtifact(artifact);
-    this.lineartView.render(null);
+    if (artifact) this.setArtifact(artifact);
+    this._hideTorch();
   }
 
   deactivate() {
     this.active = false;
-    this.flashlightOn = false;
     this._gestureFlashlight = false;
-    this.flashNorm = null;
-    this.lineartView.render(null);
+    this._hideTorch();
+  }
+
+  setArtifact(_artifact) {
+    // 暂用青铜神兽线稿；后续可按文物 id 映射不同 PNG
+    this.dimLayer?.setAttribute('src', DEFAULT_LINEART_SRC);
+    this.goldLayer?.setAttribute('src', DEFAULT_LINEART_SRC);
+  }
+
+  /**
+   * 更新手电筒光斑位置（金色图层内像素坐标，供外部/手势调用）
+   * @param {number} x
+   * @param {number} y
+   */
+  setTorchPos(x, y) {
+    if (!this.goldLayer) return;
+    // 遮罩跟随：radial-gradient 圆心绑定 CSS 变量
+    this.goldLayer.style.setProperty('--torch-x', `${x}px`);
+    this.goldLayer.style.setProperty('--torch-y', `${y}px`);
+    this.goldLayer.classList.add('pattern-lineart--lit');
+    this._torchVisible = true;
+  }
+
+  /** 将视口 client 坐标转为金色图层局部坐标 */
+  _clientToGoldLocal(clientX, clientY) {
+    const rect = this.goldLayer?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return null;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  _setTorchFromClient(clientX, clientY) {
+    const local = this._clientToGoldLocal(clientX, clientY);
+    if (!local) return;
+    this.setTorchPos(local.x, local.y);
   }
 
   onGesture(gesture) {
     this._gestureFlashlight = gesture === 'ok';
-    this.flashlightOn = this._gestureFlashlight;
-    if (!this.flashlightOn) {
-      this.lineartView.render(this._mouseNorm && this._mouseDown ? this._mouseNorm : null);
+    if (!this._gestureFlashlight && !this._torchVisible) {
+      this._hideTorch();
     }
   }
 
   update(gestureController) {
-    if (!this.active) return;
+    if (!this.active || !this._gestureFlashlight || !gestureController) return;
 
-    let norm = null;
+    const screenPos = gestureController.getIndexFingerScreenPos();
+    if (!screenPos) return;
 
-    if (this.flashlightOn && gestureController) {
-      const screenPos = gestureController.getIndexFingerScreenPos();
-      if (screenPos) {
-        norm = this._screenToLineartNorm(screenPos.x, screenPos.y);
-      }
-    }
+    const viewport = document.getElementById('viewport-16-9')?.getBoundingClientRect();
+    if (!viewport) return;
 
-    if (!norm && this._mouseDown && this._mouseNorm) {
-      norm = this._mouseNorm;
-    }
-
-    if (!norm && !this._gestureFlashlight && this._mouseNorm) {
-      norm = this._mouseNorm;
-      this.flashlightOn = true;
-    }
-
-    this.flashNorm = norm;
-    this.lineartView.render(norm);
+    const absX = viewport.left + screenPos.x * viewport.width;
+    const absY = viewport.top + screenPos.y * viewport.height;
+    this._setTorchFromClient(absX, absY);
   }
 
-  _screenToLineartNorm(nx, ny) {
-    const rect = this.lineartCanvas.getBoundingClientRect();
-    const viewport = document.getElementById('viewport-16-9')?.getBoundingClientRect();
-    if (!viewport || rect.width === 0) return { x: nx, y: ny };
-
-    const absX = viewport.left + nx * viewport.width;
-    const absY = viewport.top + ny * viewport.height;
-    return {
-      x: (absX - rect.left) / rect.width,
-      y: (absY - rect.top) / rect.height,
-    };
+  _hideTorch() {
+    this.goldLayer?.classList.remove('pattern-lineart--lit');
+    this._torchVisible = false;
   }
 
   dispose() {
     this.deactivate();
-    this.lineartCanvas.removeEventListener('mousemove', this._onMouseMove);
-    this.lineartCanvas.removeEventListener('mousedown', this._onMouseDown);
-    this.lineartCanvas.removeEventListener('mouseup', this._onMouseUp);
-    this.lineartCanvas.removeEventListener('mouseleave', this._onMouseLeave);
-    this.lineartView?.dispose?.();
-    this.lineartView = null;
+    this.stageEl.removeEventListener('mousemove', this._onMouseMove);
+    this.stageEl.removeEventListener('touchmove', this._onTouchMove);
+    this.stageEl.removeEventListener('mouseleave', this._onPointerLeave);
+    this.stageEl.removeEventListener('touchend', this._onPointerLeave);
+    this.stageEl.removeEventListener('touchcancel', this._onPointerLeave);
   }
 }

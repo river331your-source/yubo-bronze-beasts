@@ -9,12 +9,8 @@ export class SectionVisibility {
   }
 
   clearLineart() {
-    const canvas = this.ui.lineartCanvas;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx || canvas.width === 0) return;
-    ctx.fillStyle = '#070A08';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const gold = this.ui.patternTorchStage?.querySelector('.pattern-lineart--gold');
+    gold?.classList.remove('pattern-lineart--lit');
   }
 
   /** 隐藏所有舞台层（图鉴 shell + 纹样层） */

@@ -25,7 +25,7 @@ class App {
           ui: this.ui,
         }),
         pattern: new PatternSection({
-          lineartCanvas: document.getElementById('pattern-lineart-canvas'),
+          torchStage: document.getElementById('pattern-torch-stage'),
           videoEl: document.getElementById('camera-feed'),
           ui: this.ui,
         }),

@@ -209,7 +209,26 @@
             </div>
 
             <div id="section-pattern" class="scene-stage scene-stage--pattern section-hidden">
-              <canvas id="pattern-lineart-canvas" aria-hidden="true"></canvas>
+              <!-- 纹样探秘舞台：双层线稿 + 手电筒遮罩（见 style.css / PatternFlashlightInteraction） -->
+              <div class="pattern-torch-stage" id="pattern-torch-stage">
+                <div class="pattern-torch-layers">
+                  <div class="pattern-lineart-stack">
+                    <img
+                      class="pattern-lineart pattern-lineart--dim"
+                      src="/patterns/artifacts/shenshou_lines.png"
+                      alt="青铜神兽线稿"
+                      draggable="false"
+                    />
+                    <img
+                      class="pattern-lineart pattern-lineart--gold"
+                      src="/patterns/artifacts/shenshou_lines.png"
+                      alt=""
+                      aria-hidden="true"
+                      draggable="false"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="stage-overlays">

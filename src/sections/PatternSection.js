@@ -6,8 +6,8 @@ import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
 
 /** 纹样探秘：母题线稿 + 手电筒手势（独立 WebGL / 摄像头生命周期） */
 export class PatternSection {
-  constructor({ lineartCanvas, videoEl, ui }) {
-    this.lineartCanvas = lineartCanvas;
+  constructor({ torchStage, videoEl, ui }) {
+    this.torchStage = torchStage;
     this.videoEl = videoEl;
     this.ui = ui;
 
@@ -28,7 +28,7 @@ export class PatternSection {
     this.active = true;
 
     this.flashlight = new PatternFlashlightInteraction({
-      lineartCanvas: this.lineartCanvas,
+      stageEl: this.torchStage,
       getArtifact: () => ARTIFACTS[this.artifactIndex],
     });
     this.flashlight.activate();
@@ -78,6 +78,11 @@ export class PatternSection {
     this.flashlight?.setArtifact(artifact);
   }
 
+  /** 供外部驱动光斑（金色图层局部像素坐标） */
+  setTorchPos(x, y) {
+    this.flashlight?.setTorchPos(x, y);
+  }
+
   _initGestureAsync() {
     const gen = ++this._gestureInitGen;
     this._startGesture(gen).catch((err) => {
@@ -118,7 +123,7 @@ export class PatternSection {
       this.ui._applySectionHint('pattern');
       if (this.ui.interactionHint) {
         this.ui.interactionHint.textContent +=
-          ' （摄像头未授权，按住鼠标拖动预览）';
+          ' （摄像头未授权，移动鼠标预览照亮）';
       }
     }
   }
