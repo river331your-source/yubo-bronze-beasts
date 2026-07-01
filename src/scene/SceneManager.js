@@ -2,16 +2,24 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { ARTIFACTS, MODEL_ASSET_REVISION } from '../data/artifacts.js';
+import { performanceMonitor } from '../debug/PerformanceMonitor.js';
 import { createPlaceholderModel } from './PlaceholderFactory.js';
 import { PointCloudFromModel } from './PointCloudFromModel.js';
 import { loadSceneEnvironment } from './EnvironmentLoader.js';
 import { applyBronzePBRToModel } from './BronzePBRMaterial.js';
+import { claimCanvasScene, releaseCanvasScene } from './canvasSceneRegistry.js';
+import {
+  logAtlasViewportDiagnostics,
+  tickAtlasRenderDiagnostics,
+  resetAtlasRenderCounter,
+} from '../debug/atlasViewportDiagnostics.js';
 
 const TARGET_SIZE = 3;
 
 export class SceneManager {
   constructor(canvas) {
     this.canvas = canvas;
+    claimCanvasScene(canvas, this);
     this.loadingEl = document.getElementById('model-loading');
     this.artifacts = ARTIFACTS;
     this.currentIndex = 0;
@@ -31,14 +39,47 @@ export class SceneManager {
     this._initControls();
     this._initEnvironment();
     this._clock = new THREE.Clock();
-    this._fpsFrames = 0;
-    this._fpsLast = performance.now();
     this._lastGoodSize = { width: 1, height: 1 };
     this._resizeRetryId = null;
     this._running = false;
     this._rafId = null;
+    this._frameListeners = new Set();
+    this._postFrameListeners = new Set();
     this._onWindowResize = () => this._onResize();
+  }
+
+  /** 注册每帧回调（手势/交互/骨架），由唯一主循环驱动 */
+  addFrameListener(fn) {
+    this._frameListeners.add(fn);
+  }
+
+  removeFrameListener(fn) {
+    this._frameListeners.delete(fn);
+  }
+
+  addPostFrameListener(fn) {
+    this._postFrameListeners.add(fn);
+  }
+
+  removePostFrameListener(fn) {
+    this._postFrameListeners.delete(fn);
+  }
+
+  startLoop() {
+    if (this._running) return;
+    performanceMonitor.clearLoops();
     this._startLoop();
+  }
+
+  stopLoop() {
+    this._frameListeners.clear();
+    this._postFrameListeners.clear();
+    this._running = false;
+    performanceMonitor.unregisterLoop('main');
+    if (this._rafId != null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
   }
 
   /** 异步加载 IBL 环境（HDRI 优先，无文件则用 RoomEnvironment） */
@@ -87,6 +128,8 @@ export class SceneManager {
     this._resizeObserver = new ResizeObserver(() => this._onResize());
     if (stage) this._resizeObserver.observe(stage);
     window.addEventListener('resize', this._onWindowResize);
+
+    logAtlasViewportDiagnostics('SceneManager._initScene', this);
   }
 
   /**
@@ -111,6 +154,14 @@ export class SceneManager {
       this._lastGoodSize = { width, height };
       return { width, height };
     }
+
+    const cw = Math.floor(viewport.clientWidth);
+    const ch = Math.floor(viewport.clientHeight);
+    if (cw > 0 && ch > 0) {
+      this._lastGoodSize = { width: cw, height: ch };
+      return { width: cw, height: ch };
+    }
+
     return this._lastGoodSize;
   }
 
@@ -177,6 +228,8 @@ export class SceneManager {
       this._buildPointCloud(instance);
       this._frameToCenter();
       this._hideLoading();
+      this.frameModel();
+      logAtlasViewportDiagnostics('loadArtifact.cached', this);
       return artifact;
     }
 
@@ -193,6 +246,8 @@ export class SceneManager {
       this._hideLoading();
 
       if (this.onModelLoaded) this.onModelLoaded(model, artifact);
+      this.frameModel();
+      logAtlasViewportDiagnostics('loadArtifact.fbx', this);
     } catch (err) {
       console.warn(`模型加载失败 [${artifact.name}]:`, err.message);
       const placeholder = createPlaceholderModel(artifact.id);
@@ -204,6 +259,8 @@ export class SceneManager {
       this._buildPointCloud(instance);
       this._frameToCenter();
       this._hideLoading();
+      this.frameModel();
+      logAtlasViewportDiagnostics('loadArtifact.placeholder', this);
     }
 
     return artifact;
@@ -277,7 +334,6 @@ export class SceneManager {
   }
 
   _clearModelContainer() {
-    // 切换文物：销毁旧点云，仅保留当前选中文物的粒子
     if (this.pointCloud) {
       if (this.pointCloud.points?.parent) {
         this.pointCloud.points.parent.remove(this.pointCloud.points);
@@ -288,7 +344,9 @@ export class SceneManager {
       if (n > 0) console.log(`[SceneManager] 点云已销毁 (${n} 粒子)`);
     }
     while (this.modelContainer.children.length > 0) {
-      this.modelContainer.remove(this.modelContainer.children[0]);
+      const child = this.modelContainer.children[0];
+      this.modelContainer.remove(child);
+      this._disposeObject3D(child);
     }
   }
 
@@ -418,32 +476,44 @@ export class SceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    logAtlasViewportDiagnostics('resize', this);
+  }
+
+  /** 模型加载后调用，resize 时不再重置相机（避免 ResizeObserver 连发导致画面跳动/白屏） */
+  frameModel() {
     this._frameToCenter();
+    this.renderer.render(this.scene, this.camera);
   }
 
   _tickFpsMonitor() {
-    this._fpsFrames += 1;
-    const now = performance.now();
-    const elapsed = now - this._fpsLast;
-    if (elapsed < 2000) return;
-    const fps = (this._fpsFrames * 1000) / elapsed;
     const particles = this.pointCloud?.rnd?.length ?? 0;
-    console.log(
-      `[FPS] ${fps.toFixed(1)} fps | 粒子 ${particles}${particles >= 30000 ? ' (高密度)' : ''}`
-    );
-    this._fpsFrames = 0;
-    this._fpsLast = now;
+    performanceMonitor.setParticleCount(particles);
+    performanceMonitor.tickRender();
   }
 
   _startLoop() {
     this._running = true;
+    resetAtlasRenderCounter();
+    performanceMonitor.registerLoop('main');
+    logAtlasViewportDiagnostics('startLoop', this);
     const tick = () => {
-      if (!this._running) return;
+      if (!this._running) {
+        performanceMonitor.unregisterLoop('main');
+        return;
+      }
       this._rafId = requestAnimationFrame(tick);
+      performanceMonitor.tickLoop('main');
       const dt = this._clock.getDelta();
+      for (const fn of this._frameListeners) {
+        fn(dt);
+      }
       this.pointCloud?.update(dt);
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
+      tickAtlasRenderDiagnostics(this);
+      for (const fn of this._postFrameListeners) {
+        fn(dt);
+      }
       this._tickFpsMonitor();
     };
     tick();
@@ -468,12 +538,8 @@ export class SceneManager {
   }
 
   dispose() {
-    this._running = false;
-    if (this._rafId != null) {
-      cancelAnimationFrame(this._rafId);
-      this._rafId = null;
-    }
-
+    this.stopLoop();
+    releaseCanvasScene(this.canvas, this);
     this._resizeObserver?.disconnect();
     if (this._resizeRetryId != null) {
       cancelAnimationFrame(this._resizeRetryId);

@@ -40,7 +40,6 @@ export class UIController {
     this.lineartCanvas = document.getElementById('pattern-lineart-canvas');
     this.carousel = document.getElementById('artifact-carousel');
     this.artifactPrevBtn = document.getElementById('artifact-prev-btn');
-    this.interactionPanel = document.getElementById('interaction-panel');
     this.artifactInfo = document.getElementById('artifact-info');
     this.interactionHint = document.getElementById('interaction-hint');
     this.materialTimeline = document.getElementById('material-timeline');
@@ -76,18 +75,6 @@ export class UIController {
       btn.addEventListener('click', () => {
         this.onNavSelect?.(btn.dataset.nav);
       });
-    });
-
-    this.interactionPanel?.addEventListener('click', (e) => {
-      const card = e.target.closest('.mode-card[data-mode]');
-      if (!card) return;
-      const mode = card.dataset.mode;
-      // 纹样探秘独立导航：不在图鉴内叠线稿层，直接切版块
-      if (mode === 'pattern') {
-        this.onNavSelect?.('pattern');
-        return;
-      }
-      this.setMode(mode);
     });
 
     this.artifactPrevBtn?.addEventListener('click', () => this.selectPrevArtifact());
@@ -184,7 +171,7 @@ export class UIController {
       this.interactionHint.hidden = false;
       this.artifactInfo.hidden = false;
       this.materialTimeline.hidden = true;
-      this._resetModeCards('deconstruct');
+      this._scheduleAtlasResize();
     } else if (isPattern) {
       this.sectionVisibility.showStage('pattern');
       this._applySectionHint('pattern');
@@ -200,6 +187,7 @@ export class UIController {
   syncArtifactStages() {
     if (this.currentSection === 'atlas') {
       this.sectionVisibility.showStage('atlas');
+      this._scheduleAtlasResize();
     } else if (this.currentSection === 'pattern') {
       this.sectionVisibility.showStage('pattern');
     } else {
@@ -225,6 +213,15 @@ export class UIController {
     this.sectionVisibility.clearLineart();
   }
 
+  /** 布局变化后让 WebGL 按 #atlas-viewport 新尺寸重算，避免白屏 */
+  _scheduleAtlasResize() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.atlasSceneManager?.resize();
+      });
+    });
+  }
+
   /** 提示语归属版块：atlas 用手势提示，pattern 用手电提示 */
   _applySectionHint(section, mode = null) {
     if (!this.interactionHint) return;
@@ -245,10 +242,23 @@ export class UIController {
     }
   }
 
-  _resetModeCards(mode) {
-    this.interactionPanel?.querySelectorAll('.mode-card[data-mode]').forEach((card) => {
-      card.classList.toggle('active', card.dataset.mode === mode);
-    });
+  setMode(mode) {
+    if (mode === 'pattern') {
+      this.onNavSelect?.('pattern');
+      return;
+    }
+    if (this.currentSection !== 'atlas') return;
+
+    this.currentMode = mode;
+    const config = INTERACTION_MODES[mode];
+    if (config) {
+      this._applySectionHint('atlas', mode);
+      this.interactionHint.hidden = false;
+    }
+    this.materialTimeline.hidden = true;
+    this.syncArtifactStages();
+    this._scheduleAtlasResize();
+    this.onModeChange?.(mode);
   }
 
   /** 调试：版块隔离 + 中央 WebGL 健康状态 */
@@ -274,25 +284,6 @@ export class UIController {
     if (!this.sectionPlaceholder) return;
     this.sectionPlaceholder.hidden = true;
     this.sectionPlaceholder.classList.remove('visible');
-  }
-
-  setMode(mode) {
-    if (mode === 'pattern') {
-      this.onNavSelect?.('pattern');
-      return;
-    }
-    if (this.currentSection !== 'atlas') return;
-
-    this.currentMode = mode;
-    this._resetModeCards(mode);
-    const config = INTERACTION_MODES[mode];
-    if (config) {
-      this._applySectionHint('atlas', mode);
-      this.interactionHint.hidden = false;
-    }
-    this.materialTimeline.hidden = mode !== 'material';
-    this._syncArtifactStages();
-    this.onModeChange?.(mode);
   }
 
   selectArtifact(index) {
@@ -346,19 +337,22 @@ export class UIController {
     }
   }
 
-  /** 拍手切换文物：屏幕白光快闪反馈 */
+  /** 拍手切换文物：屏幕白光快闪反馈（超时强制清除，防卡 active 白屏） */
   playClapFlash() {
     const el = this.clapFlash;
     if (!el) return;
-    el.classList.remove('fade');
+    if (this._clapFlashTimer) clearTimeout(this._clapFlashTimer);
+    el.classList.remove('fade', 'active');
+    void el.offsetWidth;
     el.classList.add('active');
-    requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        el.classList.add('fade');
-        el.classList.remove('active');
-        window.setTimeout(() => el.classList.remove('fade'), 380);
-      }, 70);
-    });
+    this._clapFlashTimer = window.setTimeout(() => {
+      el.classList.add('fade');
+      el.classList.remove('active');
+      this._clapFlashTimer = window.setTimeout(() => {
+        el.classList.remove('fade');
+        this._clapFlashTimer = null;
+      }, 380);
+    }, 70);
   }
 
   showMaterialTimeline(show) {

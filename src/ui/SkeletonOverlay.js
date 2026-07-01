@@ -1,6 +1,5 @@
 /**
- * MediaPipe 手部 21 关键点（仅关节点，不绘制连线）
- * 摄像头小窗 + MediaPipe 手部骨架实时渲染
+ * MediaPipe 手部 21 关键点 — 由主循环驱动 draw()，不自建 RAF
  */
 export class SkeletonOverlay {
   constructor(videoEl, canvasEl, gestureController) {
@@ -9,13 +8,11 @@ export class SkeletonOverlay {
     this.gesture = gestureController;
     this.ctx = canvasEl.getContext('2d');
     this.running = true;
-    this._loop();
   }
 
-  _loop() {
+  draw() {
     if (!this.running) return;
     this._draw();
-    requestAnimationFrame(() => this._loop());
   }
 
   _draw() {
@@ -35,7 +32,7 @@ export class SkeletonOverlay {
 
     ctx.clearRect(0, 0, w, h);
 
-    const hands = this.gesture.lastResults?.landmarks ?? [];
+    const hands = this.gesture.getDisplayLandmarks() ?? [];
     hands.forEach((landmarks, handIdx) => {
       const hue = handIdx === 0 ? '#C9A84C' : '#6F9478';
       const joint = handIdx === 0 ? '#e8d090' : '#8fae94';

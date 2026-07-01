@@ -1,13 +1,12 @@
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { damp } from '../scene/PointCloudCastModel.js';
-
-const WASM_PATH =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm';
-const MODEL_PATH =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+import { performanceMonitor } from '../debug/PerformanceMonitor.js';
+import { createHandLandmarker } from './mediapipeVision.js';
 
 /** 指尖→掌心距离归一化后：低于此为"弯"，高于此为"伸" */
 const FINGER_CURLED = 0.4;
+
+/** MediaPipe 检测降频：每 N 帧跑一次 detectForVideo */
+const MEDIAPIPE_DETECT_INTERVAL = 2;
 const FINGER_EXTENDED = 0.56;
 
 /** 拍手判定：掌心距阈值 + 合拢速度 + 冷却（防连击） */
@@ -15,6 +14,9 @@ const CLAP_APART_DIST = 0.24;
 const CLAP_NEAR_DIST = 0.11;
 const CLAP_MIN_CLOSE_VELOCITY = 0.65;
 const CLAP_COOLDOWN_MS = 900;
+
+/** 同一 video 仅允许一个活跃 GestureController */
+const videoOwners = new WeakMap();
 
 /**
  * 手势 A/B 靠后三指区分（互斥）：
@@ -56,22 +58,126 @@ export class GestureController {
     this._prevTwoHandPalmDist = null;
     this._handsWereApart = false;
     this._clapCooldownUntil = 0;
+    this._detectFrame = 0;
+    /** @type {Array<Array<{x:number,y:number,z:number}>>|null} */
+    this._landmarkPrev = null;
+    /** @type {Array<Array<{x:number,y:number,z:number}>>|null} */
+    this._landmarkCurr = null;
+    this._interpStep = 0;
+    /** 每帧用于交互的插值关键点（骨架/掌心读取此值） */
+    this._activeLandmarks = null;
   }
 
   async init() {
-    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
-    this.landmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: MODEL_PATH,
-        delegate: 'GPU',
-      },
-      runningMode: 'VIDEO',
-      numHands: 2,
-    });
+    const prev = videoOwners.get(this.videoEl);
+    if (prev && prev !== this) {
+      prev.dispose();
+    }
+
+    this.landmarker = await createHandLandmarker();
 
     await this._startCamera();
     this.running = true;
-    this._detectLoop();
+    videoOwners.set(this.videoEl, this);
+  }
+
+  /**
+   * 每帧：插值关键点并处理手势逻辑（轻量，不阻塞渲染）
+   */
+  tickProcess() {
+    if (!this.running || !this.landmarker) return;
+
+    const landmarks = this._getInterpolatedLandmarks();
+    if (landmarks) {
+      this._activeLandmarks = landmarks;
+      this._processResults({ landmarks });
+    }
+
+    if (this._landmarkCurr) {
+      this._interpStep = Math.min(
+        this._interpStep + 1,
+        MEDIAPIPE_DETECT_INTERVAL
+      );
+    }
+  }
+
+  /**
+   * 渲染后调用：MediaPipe 检测（重计算，避免卡住 WebGL 帧）
+   */
+  tickDetect() {
+    if (!this.running || !this.landmarker) return;
+    if (this.videoEl.readyState < 2) return;
+
+    this._detectFrame += 1;
+    if (this._detectFrame % MEDIAPIPE_DETECT_INTERVAL !== 0) return;
+
+    const results = this.landmarker.detectForVideo(
+      this.videoEl,
+      performance.now()
+    );
+    this.lastResults = results;
+    performanceMonitor.tickMediapipe();
+
+    const landmarks = results.landmarks ?? [];
+    if (!landmarks.length) {
+      this._commitDetection([]);
+      this._activeLandmarks = null;
+      this._processResults({ landmarks: [] });
+      return;
+    }
+    this._commitDetection(landmarks);
+  }
+
+  /** @deprecated 兼容旧调用，等同 tickProcess */
+  tick() {
+    this.tickProcess();
+  }
+
+  _commitDetection(landmarks) {
+    if (!landmarks.length) {
+      this._landmarkPrev = null;
+      this._landmarkCurr = null;
+      this._interpStep = 0;
+      return;
+    }
+
+    this._landmarkPrev = this._landmarkCurr
+      ? this._cloneLandmarks(this._landmarkCurr)
+      : this._cloneLandmarks(landmarks);
+    this._landmarkCurr = this._cloneLandmarks(landmarks);
+    this._interpStep = 0;
+  }
+
+  _cloneLandmarks(hands) {
+    return hands.map((hand) => hand.map((p) => ({ x: p.x, y: p.y, z: p.z })));
+  }
+
+  _lerpLandmarks(from, to, t) {
+    const alpha = Math.min(1, Math.max(0, t));
+    return to.map((hand, hi) =>
+      hand.map((p, li) => {
+        const a = from[hi]?.[li] ?? p;
+        return {
+          x: a.x + (p.x - a.x) * alpha,
+          y: a.y + (p.y - a.y) * alpha,
+          z: a.z + (p.z - a.z) * alpha,
+        };
+      })
+    );
+  }
+
+  _getInterpolatedLandmarks() {
+    if (!this._landmarkCurr?.length) return null;
+    if (!this._landmarkPrev || this._interpStep <= 0) {
+      return this._landmarkCurr;
+    }
+    const t = this._interpStep / MEDIAPIPE_DETECT_INTERVAL;
+    return this._lerpLandmarks(this._landmarkPrev, this._landmarkCurr, t);
+  }
+
+  /** 骨架叠加层读取的 landmarks */
+  getDisplayLandmarks() {
+    return this._activeLandmarks ?? this.lastResults?.landmarks ?? null;
   }
 
   async _startCamera() {
@@ -80,21 +186,6 @@ export class GestureController {
     });
     this.videoEl.srcObject = stream;
     await this.videoEl.play();
-  }
-
-  _detectLoop() {
-    if (!this.running || !this.landmarker) return;
-
-    if (this.videoEl.readyState >= 2) {
-      const results = this.landmarker.detectForVideo(
-        this.videoEl,
-        performance.now()
-      );
-      this.lastResults = results;
-      this._processResults(results);
-    }
-
-    requestAnimationFrame(() => this._detectLoop());
   }
 
   _processResults(results) {
@@ -257,7 +348,7 @@ export class GestureController {
     const raw = this._calcFingerExtendScores(lm);
     const keys = ['thumb', 'index', 'middle', 'ring', 'pinky'];
     keys.forEach((k, i) => {
-      this._smoothExtend[k] = damp(this._smoothExtend[k], raw[i], 14, dt);
+      this._smoothExtend[k] = damp(this._smoothExtend[k], raw[i], 18, dt);
     });
   }
 
@@ -322,7 +413,7 @@ export class GestureController {
   mapGestureToStages() {
     if (this.numHands >= 2) return null;
 
-    const lm = this.lastResults?.landmarks?.[0];
+    const lm = this._activeLandmarks?.[0];
     if (!lm) return null;
 
     const mode = this.deconstructMode;
@@ -436,7 +527,7 @@ export class GestureController {
   }
 
   getPalmCenterX() {
-    const lm = this.lastResults?.landmarks?.[0];
+    const lm = this._activeLandmarks?.[0];
     if (!lm) return null;
     const palm = this._getPalmCenter(lm);
     return 1 - palm.x;
@@ -463,7 +554,7 @@ export class GestureController {
   }
 
   getHandTrackTransform() {
-    const lm = this.lastResults?.landmarks?.[0];
+    const lm = this._activeLandmarks?.[0];
     if (!lm) return null;
 
     const wrist = lm[0];
@@ -477,8 +568,8 @@ export class GestureController {
   }
 
   getIndexFingerScreenPos() {
-    if (!this.lastResults?.landmarks?.[0]) return null;
-    const tip = this.lastResults.landmarks[0][8];
+    if (!this._activeLandmarks?.[0]) return null;
+    const tip = this._activeLandmarks[0][8];
     return { x: 1 - tip.x, y: tip.y };
   }
 
@@ -494,6 +585,9 @@ export class GestureController {
     this.landmarker?.close?.();
     this.landmarker = null;
     this.lastResults = null;
+    this._landmarkPrev = null;
+    this._landmarkCurr = null;
+    this._activeLandmarks = null;
     this.currentGesture = 'none';
     this.deconstructMode = 'none';
     this.resetPalmTracking();
@@ -501,5 +595,8 @@ export class GestureController {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     this.videoEl.srcObject = null;
     this.videoEl.pause?.();
+    if (videoOwners.get(this.videoEl) === this) {
+      videoOwners.delete(this.videoEl);
+    }
   }
 }

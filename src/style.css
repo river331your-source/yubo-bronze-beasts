@@ -439,91 +439,6 @@ body {
   }
 }
 
-/* ⑥ 底部信息 */
-.home-layer--footer {
-  z-index: 5;
-  top: auto;
-  height: auto;
-  bottom: 0;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 0 clamp(16px, 3vw, 28px) clamp(12px, 2vh, 20px);
-  opacity: 0;
-  pointer-events: none;
-}
-
-#section-home.home-animate .home-layer--footer {
-  animation: home-footer-in 0.7s ease forwards 3s;
-}
-
-@keyframes home-footer-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.home-footer-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.home-footer-brand {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: rgba(201, 168, 76, 0.82);
-}
-
-.home-footer-qr {
-  width: 28px;
-  height: 28px;
-  color: var(--patina);
-  opacity: 0.65;
-  flex-shrink: 0;
-}
-
-.home-footer-center {
-  font-family: var(--font-en);
-  font-size: clamp(8px, 0.9vw, 9.5px);
-  font-weight: 300;
-  letter-spacing: 0.72em;
-  color: rgba(111, 148, 120, 0.38);
-  text-align: center;
-  white-space: nowrap;
-}
-
-.home-footer-right {
-  justify-self: end;
-}
-
-.home-footer-date {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.home-footer-date-y,
-.home-footer-date-w {
-  font-family: var(--font-en);
-  font-size: 10px;
-  font-weight: 300;
-  color: rgba(201, 168, 76, 0.55);
-}
-
-.home-footer-date-md {
-  font-family: var(--font-en);
-  font-size: 13px;
-  color: var(--jijin);
-}
-
 /* 进入按钮 */
 .enter-btn {
   display: flex;
@@ -612,10 +527,6 @@ body {
     top: 64%;
   }
 
-  .home-footer-center {
-    display: none;
-  }
-
   .home-vert {
     letter-spacing: 0.28em;
   }
@@ -632,7 +543,6 @@ body {
 #main-page {
   --header-h: calc(56px * var(--ui-scale));
   --col-left: calc(280px * var(--ui-scale));
-  --col-right: calc(300px * var(--ui-scale));
   display: flex;
   flex-direction: column;
   background: var(--stage-bg);
@@ -854,7 +764,7 @@ body {
   box-shadow: 0 0 10px rgba(201, 168, 76, 0.15);
 }
 
-/* ── 主体布局：撑满顶栏以下区域，舞台列内三栏在 #section-atlas ── */
+/* ── 主体布局：撑满顶栏以下区域，舞台列内左选择器 + 中央视口 ── */
 .main-body {
   display: grid;
   grid-template-columns: 1fr;
@@ -881,15 +791,16 @@ body {
   grid-column: 1 / -1;
 }
 
-/* 神兽图鉴外壳：左文物选择器 + 中央视口 + 右交互卡片 */
+/* 神兽图鉴外壳：左文物选择器 + 中央视口（无右侧卡片） */
 #section-atlas.atlas-shell {
   display: grid;
-  grid-template-columns: var(--col-left) 1fr var(--col-right);
+  grid-template-columns: var(--col-left) 1fr;
   grid-template-rows: 1fr;
   align-items: stretch;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  background: #0a0d0a;
 }
 
 .atlas-viewport {
@@ -925,8 +836,12 @@ body {
   height: 100%;
 }
 
-#section-pattern.scene-stage--pattern {
-  z-index: 2;
+#section-atlas.scene-stage--atlas:not(.section-hidden) {
+  z-index: 3;
+}
+
+#section-pattern.scene-stage--pattern:not(.section-hidden) {
+  z-index: 3;
   background: #0a0d0a;
 }
 
@@ -986,15 +901,6 @@ body {
 .main-body[data-section='craft'] .section-placeholder,
 .main-body[data-section='story'] .section-placeholder {
   grid-column: 1 / -1;
-}
-
-.mode-card-static {
-  cursor: default;
-  pointer-events: none;
-}
-
-.mode-card-static .mode-card-link {
-  display: none;
 }
 
 /* ── 左侧文物选择器：墨绿底 + 剪影衬底 ── */
@@ -1233,7 +1139,7 @@ body {
 /* ── 中央舞台 ── */
 .scene-stage {
   position: relative;
-  background: var(--stage-bg);
+  background: #0a0d0a;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1335,14 +1241,17 @@ body {
   pointer-events: none;
   background: #fff;
   opacity: 0;
+  visibility: hidden;
 }
 
 .clap-flash.active {
+  visibility: visible;
   opacity: 0.82;
   transition: opacity 0.06s ease-out;
 }
 
 .clap-flash.fade {
+  visibility: visible;
   opacity: 0;
   transition: opacity 0.38s ease-out;
 }
@@ -1440,122 +1349,6 @@ body {
 #camera-feed.visible,
 .camera-pip.visible #camera-feed {
   opacity: 1;
-}
-
-/* ── 右侧交互面板 ── */
-.mode-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 38px;
-  padding: 0 36px 0 28px;
-  z-index: 10;
-  min-height: 0;
-  height: 100%;
-  border-left: 1px solid rgba(111, 148, 120, 0.15);
-  background: var(--stage-bg);
-}
-
-.mode-rail {
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 72%;
-  pointer-events: none;
-}
-
-.mode-rail-line {
-  flex: 1;
-  width: 1px;
-  background: rgba(111, 148, 120, 0.2);
-}
-
-.mode-rail-dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--patina);
-  opacity: 0.55;
-  flex-shrink: 0;
-}
-
-.mode-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  padding: 0 20px 0 0;
-  font-family: var(--font-body);
-  transition: opacity 0.3s ease;
-  width: 100%;
-}
-
-.mode-card:hover,
-.mode-card.active {
-  opacity: 1;
-}
-
-.mode-card:not(.active) {
-  opacity: 0.72;
-}
-
-.mode-card-icon {
-  flex-shrink: 0;
-}
-
-.mode-card-icon svg {
-  width: 52px;
-  height: 52px;
-  display: block;
-}
-
-.mode-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-
-.mode-card-title {
-  font-size: 13px;
-  color: var(--jijin);
-  letter-spacing: 0.14em;
-  line-height: 1.35;
-}
-
-.mode-card-desc {
-  font-size: 10px;
-  color: var(--patina);
-  line-height: 1.6;
-  letter-spacing: 0.04em;
-  opacity: 0.82;
-  max-width: 190px;
-}
-
-.mode-card-link {
-  font-size: 10px;
-  color: var(--patina);
-  letter-spacing: 0.12em;
-  margin-top: 2px;
-  opacity: 0.75;
-}
-
-.mode-card.active .mode-card-link {
-  opacity: 0.9;
-}
-
-.mode-card.active .mode-card-icon svg {
-  filter: drop-shadow(0 0 12px rgba(201, 168, 76, 0.4));
 }
 
 /* 分件标注层 — SVG 圆点+引线+名称，不挡交互 */
@@ -1860,7 +1653,6 @@ body {
 @media (max-width: 768px) {
   #main-page {
     --col-left: calc(200px * var(--ui-scale));
-    --col-right: 0;
   }
 
   .site-header {
@@ -1869,10 +1661,6 @@ body {
   }
 
   .site-nav {
-    display: none;
-  }
-
-  .mode-panel {
     display: none;
   }
 
@@ -1901,4 +1689,47 @@ body {
   .arc-node[data-pos='4'] {
     left: 90px;
   }
+}
+
+/* ── 性能诊断角标（dev 或 ?perf=1） ── */
+#perf-hud {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 9999;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(7, 10, 8, 0.82);
+  border: 1px solid rgba(111, 148, 120, 0.35);
+  color: rgba(111, 148, 120, 0.9);
+  min-width: 148px;
+  backdrop-filter: blur(4px);
+}
+
+.perf-hud-row {
+  white-space: nowrap;
+}
+
+.perf-hud-fps.perf-ok {
+  color: #8fd4a0;
+}
+
+.perf-hud-fps.perf-warn {
+  color: #c9a84c;
+}
+
+.perf-hud-fps.perf-bad {
+  color: #e07070;
+}
+
+.perf-hud-raf {
+  font-size: 9px;
+  opacity: 0.75;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

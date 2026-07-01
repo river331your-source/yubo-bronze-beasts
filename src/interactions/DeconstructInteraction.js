@@ -17,8 +17,7 @@ export class DeconstructInteraction {
     this.lastAbsTime = performance.now() * 0.001;
 
     this._viewRotY = 0;
-    this._viewRotVelY = 0;
-    this._palmSlideGain = 4.2;
+    this._palmRotLambda = 18;
 
     this._mouseNorm = null;
     const stage = sceneManager.canvas.parentElement;
@@ -74,12 +73,12 @@ export class DeconstructInteraction {
     this.active = true;
     this.sceneManager.setAutoRotate(false);
     const pc = this.sceneManager.pointCloud;
+    pc?.setSimulationPaused(false);
     pc?.setDeconstructState('solid');
     pc?.setDissolveState(0);
     pc?.setAutoSpin(false);
     pc?.setHandRotation(0, 0);
     this._viewRotY = 0;
-    this._viewRotVelY = 0;
     this.partLabels?.setVisible(true);
     this.lastAbsTime = performance.now() * 0.001;
   }
@@ -93,7 +92,6 @@ export class DeconstructInteraction {
     pc?.setAutoSpin(true);
     this.partLabels?.setVisible(false);
     this._viewRotY = 0;
-    this._viewRotVelY = 0;
     this.sceneManager.setAutoRotate(true);
   }
 
@@ -113,7 +111,6 @@ export class DeconstructInteraction {
     const handPresent =
       gestureController != null &&
       gestureController.currentGesture !== 'none';
-    let targetVelY = 0;
     let labelOpacity = 0;
 
     if (handPresent && gestureController.numHands >= 2) {
@@ -123,7 +120,6 @@ export class DeconstructInteraction {
       if (gestureController.modeDisplayLabel) {
         this.ui?.updateGestureDebugLabel?.(gestureController.modeDisplayLabel);
       }
-      targetVelY = 0;
     } else if (handPresent && typeof gestureController.mapGestureToStages === 'function') {
       const stages = gestureController.mapGestureToStages();
       if (stages) {
@@ -140,9 +136,10 @@ export class DeconstructInteraction {
           stages.deconstruct >= 0.45 && stages.mode !== 'fist';
 
         if (canSlide) {
-          const slide = gestureController.getPalmSlideDelta?.();
-          if (slide) {
-            targetVelY = (slide.delta / Math.max(dt, 1e-4)) * this._palmSlideGain;
+          const palmX = gestureController.getPalmCenterX?.();
+          if (palmX != null) {
+            const targetRotY = (palmX - 0.5) * Math.PI * 1.25;
+            this._viewRotY = damp(this._viewRotY, targetRotY, this._palmRotLambda, dt);
           }
         } else {
           gestureController.resetPalmTracking?.();
@@ -156,18 +153,11 @@ export class DeconstructInteraction {
       pc.setDissolveState(dissolve);
       labelOpacity = dissolve > 0.05 ? Math.max(0, 1 - dissolve * 1.2) : deconstruct > 0.35 ? 1 : 0;
       this._viewRotY = (this._mouseNorm.x - 0.5) * Math.PI * 1.1;
-      targetVelY = 0;
-      this._viewRotVelY = 0;
-      pc.update(dt);
       pc.setHandRotation(0, this._viewRotY);
       this._updateLabels(pc, labelOpacity);
       return;
     }
 
-    this._viewRotVelY = damp(this._viewRotVelY, targetVelY, 10, dt);
-    this._viewRotY += this._viewRotVelY * dt;
-
-    pc.update(dt);
     pc.setHandRotation(0, this._viewRotY);
 
     this._updateLabels(pc, labelOpacity);

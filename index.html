@@ -17,7 +17,7 @@
   </head>
   <body>
     <div id="viewport-16-9">
-    <div id="app">
+      <div id="app">
       <section id="main-page" class="page active">
         <div class="main-vignette" aria-hidden="true"></div>
 
@@ -154,30 +154,6 @@
               <p class="home-vert home-vert--left" aria-hidden="true">洹四千年·神兽之一兽</p>
               <p class="home-vert home-vert--right" aria-hidden="true">探青铜文明之源</p>
             </div>
-
-            <!-- ⑥ 底部信息栏 -->
-            <footer class="home-layer home-layer--footer">
-              <div class="home-footer-left">
-                <span class="home-footer-brand">河南博物院出品</span>
-                <svg class="home-footer-qr" viewBox="0 0 40 40" aria-hidden="true">
-                  <rect x="2" y="2" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1" />
-                  <rect x="6" y="6" width="10" height="10" fill="currentColor" />
-                  <rect x="24" y="6" width="10" height="10" fill="currentColor" />
-                  <rect x="6" y="24" width="10" height="10" fill="currentColor" />
-                  <rect x="20" y="20" width="4" height="4" fill="currentColor" />
-                  <rect x="28" y="24" width="4" height="4" fill="currentColor" />
-                  <rect x="24" y="32" width="8" height="4" fill="currentColor" />
-                </svg>
-              </div>
-              <div class="home-footer-center">H E N A N &nbsp; M U S E U M</div>
-              <div class="home-footer-right">
-                <span class="home-footer-date">
-                  <span class="home-footer-date-y">2024</span>
-                  <span class="home-footer-date-md">05 / 18</span>
-                  <span class="home-footer-date-w">Sat.</span>
-                </span>
-              </div>
-            </footer>
           </div>
 
           <!-- 中央舞台列：图鉴 WebGL 与纹样线稿分层隔离 -->
@@ -230,83 +206,6 @@
                   <p class="timeline-hint">拖动滑块，拂去千年铜锈见吉金</p>
                 </div>
               </div>
-
-              <!-- 神兽图鉴专属：右侧三种交互模式卡片 -->
-              <aside class="mode-panel" id="interaction-panel">
-                <div class="mode-rail" aria-hidden="true">
-                  <span class="mode-rail-line"></span>
-                  <span class="mode-rail-dot"></span>
-                  <span class="mode-rail-line"></span>
-                  <span class="mode-rail-dot"></span>
-                  <span class="mode-rail-line"></span>
-                </div>
-                <button class="mode-card active" data-mode="deconstruct" type="button">
-                  <span class="mode-card-icon">
-                    <svg viewBox="0 0 56 56" aria-hidden="true">
-                      <circle cx="28" cy="28" r="24" fill="#070A08" stroke="#C9A84C" stroke-width="1" />
-                      <rect x="26" y="2" width="4" height="3" fill="#C9A84C" />
-                      <rect x="50" y="26" width="3" height="4" fill="#C9A84C" />
-                      <rect x="26" y="50" width="4" height="3" fill="#C9A84C" />
-                      <rect x="3" y="26" width="3" height="4" fill="#C9A84C" />
-                      <rect x="17" y="17" width="3" height="3" fill="#C9A84C" />
-                      <rect x="24" y="16" width="3" height="3" fill="#C9A84C" opacity="0.75" />
-                      <rect x="31" y="17" width="3" height="3" fill="#C9A84C" opacity="0.55" />
-                      <rect x="19" y="24" width="3" height="3" fill="#C9A84C" opacity="0.85" />
-                      <rect x="27" y="24" width="3" height="3" fill="#C9A84C" />
-                      <rect x="35" y="25" width="3" height="3" fill="#C9A84C" opacity="0.65" />
-                      <rect x="18" y="31" width="3" height="3" fill="#C9A84C" opacity="0.7" />
-                      <rect x="26" y="32" width="3" height="3" fill="#C9A84C" opacity="0.9" />
-                      <rect x="33" y="31" width="3" height="3" fill="#C9A84C" opacity="0.45" />
-                    </svg>
-                  </span>
-                  <span class="mode-card-body">
-                    <span class="mode-card-title">解构与重构</span>
-                    <span class="mode-card-desc">粒子解构神兽形态，感受结构之美</span>
-                    <span class="mode-card-link">进入体验 &gt;</span>
-                  </span>
-                </button>
-                <button class="mode-card" data-mode="pattern" type="button">
-                  <span class="mode-card-icon">
-                    <svg viewBox="0 0 56 56" aria-hidden="true">
-                      <circle cx="28" cy="28" r="24" fill="#070A08" stroke="#C9A84C" stroke-width="1" />
-                      <rect x="26" y="2" width="4" height="3" fill="#C9A84C" />
-                      <rect x="50" y="26" width="3" height="4" fill="#C9A84C" />
-                      <rect x="26" y="50" width="4" height="3" fill="#C9A84C" />
-                      <rect x="3" y="26" width="3" height="4" fill="#C9A84C" />
-                      <circle cx="24" cy="26" r="4.5" fill="none" stroke="#C9A84C" stroke-width="1" />
-                      <path d="M30 26 L44 18 L44 34 Z" fill="none" stroke="#C9A84C" stroke-width="1" />
-                      <path d="M12 20 L17 26 L12 32" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.55" />
-                      <path d="M12 34 L17 38 L12 42" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.35" />
-                    </svg>
-                  </span>
-                  <span class="mode-card-body">
-                    <span class="mode-card-title">纹样探秘</span>
-                    <span class="mode-card-desc">手电筒照亮纹样，探索隐藏的文化密码</span>
-                    <span class="mode-card-link">进入体验 &gt;</span>
-                  </span>
-                </button>
-                <button class="mode-card" data-mode="material" type="button">
-                  <span class="mode-card-icon">
-                    <svg viewBox="0 0 56 56" aria-hidden="true">
-                      <circle cx="28" cy="28" r="24" fill="#070A08" stroke="#C9A84C" stroke-width="1" />
-                      <rect x="26" y="2" width="4" height="3" fill="#C9A84C" />
-                      <rect x="50" y="26" width="3" height="4" fill="#C9A84C" />
-                      <rect x="26" y="50" width="4" height="3" fill="#C9A84C" />
-                      <rect x="3" y="26" width="3" height="4" fill="#C9A84C" />
-                      <path d="M18 22 C20 18 36 18 38 22 C36 26 20 26 18 22Z" fill="none" stroke="#C9A84C" stroke-width="1" />
-                      <circle cx="22" cy="22" r="1.5" fill="#C9A84C" />
-                      <circle cx="34" cy="22" r="1.5" fill="#C9A84C" />
-                      <path d="M24 30 C26 33 30 33 32 30" fill="none" stroke="#C9A84C" stroke-width="0.8" />
-                      <path d="M16 36 C18 40 38 40 40 36" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.75" />
-                    </svg>
-                  </span>
-                  <span class="mode-card-body">
-                    <span class="mode-card-title">材质还原</span>
-                    <span class="mode-card-desc">还原青铜本色，感受岁月与工艺的痕迹</span>
-                    <span class="mode-card-link">进入体验 &gt;</span>
-                  </span>
-                </button>
-              </aside>
             </div>
 
             <div id="section-pattern" class="scene-stage scene-stage--pattern section-hidden">
@@ -325,7 +224,7 @@
                 <canvas id="skeleton-overlay" aria-hidden="true"></canvas>
               </div>
               <div class="interaction-hint" id="interaction-hint" hidden>
-                握拳：完整形态 · 张开：考古解构
+                握拳聚合 · 手势A拆解 · 手势B消散 · 双手拍合切换文物
               </div>
               <div class="gesture-status" id="gesture-status" hidden>
                 <span class="gesture-dot"></span>
@@ -341,7 +240,7 @@
           </div>
         </div>
       </section>
-    </div>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

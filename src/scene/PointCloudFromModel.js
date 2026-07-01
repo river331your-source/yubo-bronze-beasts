@@ -276,6 +276,7 @@ export class PointCloudFromModel {
     this._baseRotY = 0;
     /** 解构手势模式下关闭自动慢转，转手停则模型停 */
     this._autoSpin = true;
+    this._simPaused = false;
     /** 质心锚点降频：每 3 帧重算一次 */
     this._centroidFrame = 0;
     this._partCentroidsLocal = {};
@@ -567,8 +568,20 @@ export class PointCloudFromModel {
     if (!enabled) this._baseRotY = 0;
   }
 
+  /** 材质还原模式：暂停粒子重算，仅显示网格 */
+  setSimulationPaused(paused) {
+    this._simPaused = paused;
+    if (paused) this._syncMeshVisibility();
+  }
+
   update(dt) {
     if (!this.points || !this.geometry) return;
+
+    if (this._simPaused) {
+      this._syncMeshVisibility();
+      return;
+    }
+
     this.time += dt;
     const lambda = 4 / (this.config?.TRANSITION_SEC ?? 1.5);
     this.progress = damp(this.progress, this.targetProgress, lambda, dt);

@@ -1,4 +1,5 @@
 import './style.css';
+import { performanceMonitor } from './debug/PerformanceMonitor.js';
 import { UIController } from './ui/UIController.js';
 import { AppRouter } from './core/AppRouter.js';
 import { HomeSection } from './sections/HomeSection.js';
@@ -43,6 +44,12 @@ class App {
   }
 
   async init() {
+    if (!document.getElementById('app') || !document.getElementById('main-page')) {
+      console.error('[App] DOM 结构缺失 — 请硬刷新页面（Ctrl+Shift+R）');
+      return;
+    }
+
+    performanceMonitor.init();
     this.ui.onNavSelect = (id) => this.router.switchSection(id);
     this.ui.onArtifactSelect = (index) => this.router.loadArtifact(index);
     this.ui.onModeChange = (mode) => this.router.switchMode(mode);
@@ -51,14 +58,44 @@ class App {
     const initial = SECTION_IDS.includes(hashSection) ? hashSection : 'home';
     await this.router.switchSection(initial);
 
-    window.addEventListener('hashchange', () => {
-      const id = location.hash.replace(/^#\/?/, '') || 'home';
-      if (SECTION_IDS.includes(id) && id !== this.router.currentSection) {
-        this.router.switchSection(id);
-      }
-    });
+    window.addEventListener('hashchange', this._onHashChange);
+  }
+
+  _onHashChange = () => {
+    const id = location.hash.replace(/^#\/?/, '') || 'home';
+    if (SECTION_IDS.includes(id) && id !== this.router.currentSection) {
+      this.router.switchSection(id);
+    }
+  };
+
+  destroy() {
+    window.removeEventListener('hashchange', this._onHashChange);
+    const section = this.router?.currentSection;
+    if (section && this.router.sections[section]) {
+      this.router.sections[section].onLeave?.();
+    }
+    this.router.currentSection = null;
+    performanceMonitor.dispose();
   }
 }
 
-const app = new App();
-app.init();
+let app = null;
+
+async function bootstrap() {
+  try {
+    app?.destroy();
+    app = new App();
+    await app.init();
+  } catch (err) {
+    console.error('[App] 初始化失败:', err);
+  }
+}
+
+bootstrap();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    app?.destroy();
+    app = null;
+  });
+}

@@ -27,6 +27,7 @@ export class MaterialRestoreInteraction {
   activate() {
     this.active = true;
     this.sceneManager.setAutoRotate(true);
+    this.sceneManager.pointCloud?.setSimulationPaused(true);
     this.sceneManager.setParticlesVisible(false);
     this.sceneManager.setMeshVisible(true);
     this._applyShaderMaterials();
@@ -39,6 +40,7 @@ export class MaterialRestoreInteraction {
 
   deactivate() {
     this.active = false;
+    this.sceneManager.pointCloud?.setSimulationPaused(false);
     this._restoreOriginalMaterials();
     this.ui.showMaterialTimeline(false);
     this.sceneManager.setMeshVisible(false);

@@ -2,6 +2,7 @@ import { GestureController } from '../interactions/GestureController.js';
 import { PatternFlashlightInteraction } from '../interactions/PatternFlashlightInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
+import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
 
 /** 纹样探秘：母题线稿 + 手电筒手势（独立 WebGL / 摄像头生命周期） */
 export class PatternSection {
@@ -15,9 +16,10 @@ export class PatternSection {
     this.flashlight = null;
     this.gestureController = null;
     this.skeletonOverlay = null;
-    this._interactionRunning = false;
-    this._interactionRafId = null;
     this._onKeydown = null;
+    this._patternFrameListener = () => this._onPatternFrame();
+    this._patternDetectListener = () => this._onPatternDetect();
+    this._gestureInitGen = 0;
   }
 
   /** onEnter: 线稿视图 + 手电筒手势 */
@@ -36,20 +38,19 @@ export class PatternSection {
     this.ui.syncArtifactStages();
 
     this._bindKeyboard();
-    await this._startGesture();
-    this._startInteractionLoop();
+
+    // 先启动主循环（线稿/手电不依赖摄像头）
+    startMainLoop('pattern', this._patternFrameListener, this._patternDetectListener);
+    this._initGestureAsync();
   }
 
   /** onLeave: 停止检测循环、关闭摄像头 */
   onLeave() {
     if (!this.active) return;
     this.active = false;
+    this._gestureInitGen += 1;
 
-    this._interactionRunning = false;
-    if (this._interactionRafId != null) {
-      cancelAnimationFrame(this._interactionRafId);
-      this._interactionRafId = null;
-    }
+    stopMainLoop();
 
     if (this._onKeydown) {
       window.removeEventListener('keydown', this._onKeydown);
@@ -77,13 +78,28 @@ export class PatternSection {
     this.flashlight?.setArtifact(artifact);
   }
 
-  async _startGesture() {
+  _initGestureAsync() {
+    const gen = ++this._gestureInitGen;
+    this._startGesture(gen).catch((err) => {
+      if (gen !== this._gestureInitGen) return;
+      console.warn('[PatternSection] 摄像头/手势初始化异常:', err?.message ?? err);
+    });
+  }
+
+  async _startGesture(gen) {
     try {
-      this.gestureController = new GestureController(this.videoEl);
-      await this.gestureController.init();
+      const gc = new GestureController(this.videoEl);
+      await gc.init();
+
+      if (!this.active || gen !== this._gestureInitGen) {
+        gc.dispose();
+        return;
+      }
+
+      this.gestureController = gc;
       this.ui.showGestureUI(true);
 
-      this.gestureController.onGestureChange = (gesture) => {
+      gc.onGestureChange = (gesture) => {
         this.ui.updateGestureLabel(gesture);
         this.flashlight?.onGesture?.(gesture);
       };
@@ -91,9 +107,10 @@ export class PatternSection {
       this.skeletonOverlay = new SkeletonOverlay(
         this.videoEl,
         document.getElementById('skeleton-overlay'),
-        this.gestureController
+        gc
       );
     } catch (err) {
+      if (!this.active || gen !== this._gestureInitGen) return;
       this.gestureController?.dispose();
       this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
@@ -118,13 +135,13 @@ export class PatternSection {
     window.addEventListener('keydown', this._onKeydown);
   }
 
-  _startInteractionLoop() {
-    this._interactionRunning = true;
-    const tick = () => {
-      if (!this._interactionRunning) return;
-      this._interactionRafId = requestAnimationFrame(tick);
-      this.flashlight?.update(this.gestureController ?? null);
-    };
-    tick();
+  _onPatternFrame() {
+    this.gestureController?.tickProcess();
+    this.skeletonOverlay?.draw();
+    this.flashlight?.update(this.gestureController ?? null);
+  }
+
+  _onPatternDetect() {
+    this.gestureController?.tickDetect();
   }
 }

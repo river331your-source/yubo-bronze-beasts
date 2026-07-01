@@ -4,6 +4,7 @@ import { DeconstructInteraction } from '../interactions/DeconstructInteraction.j
 import { MaterialRestoreInteraction } from '../interactions/MaterialRestoreInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
+import { logAtlasViewportDiagnostics } from '../debug/atlasViewportDiagnostics.js';
 
 /** 神兽图鉴：五件青铜器 + 三种交互模式 + 手势 */
 export class AtlasSection {
@@ -18,10 +19,12 @@ export class AtlasSection {
     this.gestureController = null;
     this.skeletonOverlay = null;
     this.interactions = {};
-    this._interactionRunning = false;
-    this._interactionRafId = null;
     this._onKeydown = null;
     this._artifactSwitchBusy = false;
+    this._atlasFrameListener = (dt) => this._onAtlasFrame(dt);
+    this._atlasDetectListener = () => this._onAtlasDetect();
+    /** 递增以取消进行中的异步摄像头初始化 */
+    this._gestureInitGen = 0;
   }
 
   /** onEnter: 创建 Three.js 场景、加载 FBX、启用手势与解构交互 */
@@ -36,7 +39,16 @@ export class AtlasSection {
 
     // 确保图鉴 shell 已显示后再测量 viewport（避免 buffer 0×0 白屏）
     this.ui.sectionVisibility.showStage('atlas');
+    this.ui.clapFlash?.classList.remove('active', 'fade');
+    logAtlasViewportDiagnostics('AtlasSection.before-rAF');
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    logAtlasViewportDiagnostics('AtlasSection.after-rAF');
+
+    if (this.sceneManager) {
+      this.sceneManager.dispose();
+      this.sceneManager = null;
+      this.ui.atlasSceneManager = null;
+    }
 
     this.sceneManager = new SceneManager(this.canvas);
     this.ui.atlasSceneManager = this.sceneManager;
@@ -54,27 +66,36 @@ export class AtlasSection {
     this.switchMode('deconstruct');
     this.ui.syncArtifactStages();
     this.ui.logSectionState('AtlasSection.onEnter');
+    this.ui._scheduleAtlasResize();
 
     this.sceneManager.resize();
     await new Promise((r) => requestAnimationFrame(r));
     this.sceneManager.resize();
+    this.sceneManager.frameModel();
 
     this._bindKeyboard();
-  // 手势（含摄像头）先完成初始化，再启动 update 循环，避免 gc 为 null
-    await this._startGesture();
-    this._startInteractionLoop();
+
+    // ① 立即启动 WebGL 渲染循环（不依赖摄像头）
+    this.sceneManager.addFrameListener(this._atlasFrameListener);
+    this.sceneManager.addPostFrameListener(this._atlasDetectListener);
+    this.sceneManager.startLoop();
+    logAtlasViewportDiagnostics('AtlasSection.loopStarted', this.sceneManager);
+
+    // ② 摄像头 + MediaPipe 异步初始化，失败也不阻塞画面
+    this._initGestureAsync();
+
+    window.setTimeout(() => {
+      if (this.active && this.sceneManager) {
+        logAtlasViewportDiagnostics('AtlasSection.+2s', this.sceneManager);
+      }
+    }, 2000);
   }
 
   /** onLeave: 停止 rAF、释放 WebGL、关闭摄像头 */
   onLeave() {
     if (!this.active) return;
     this.active = false;
-
-    this._interactionRunning = false;
-    if (this._interactionRafId != null) {
-      cancelAnimationFrame(this._interactionRafId);
-      this._interactionRafId = null;
-    }
+    this._gestureInitGen += 1;
 
     if (this._onKeydown) {
       window.removeEventListener('keydown', this._onKeydown);
@@ -99,6 +120,7 @@ export class AtlasSection {
 
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');
+    this.ui.clapFlash?.classList.remove('active', 'fade');
   }
 
   switchMode(mode) {
@@ -120,36 +142,54 @@ export class AtlasSection {
       Object.values(this.interactions).forEach((i) => i.deactivate?.());
       this.switchMode(this.currentMode);
       this.sceneManager.resize();
+      this.sceneManager.frameModel();
     } finally {
       this._artifactSwitchBusy = false;
     }
   }
 
-  async _startGesture() {
+  /** 后台初始化摄像头/手势，不阻塞 startLoop */
+  _initGestureAsync() {
+    const gen = ++this._gestureInitGen;
+    this._startGesture(gen).catch((err) => {
+      if (gen !== this._gestureInitGen) return;
+      console.warn('[AtlasSection] 摄像头/手势初始化异常:', err?.message ?? err);
+    });
+  }
+
+  async _startGesture(gen) {
     try {
-      this.gestureController = new GestureController(this.videoEl);
-      await this.gestureController.init();
+      const gc = new GestureController(this.videoEl);
+      await gc.init();
+
+      if (!this.active || gen !== this._gestureInitGen) {
+        gc.dispose();
+        return;
+      }
+
+      this.gestureController = gc;
       this.ui.showGestureUI(true);
 
-      this.gestureController.onGestureChange = (gesture) => {
+      gc.onGestureChange = (gesture) => {
         this.ui.updateGestureLabel(gesture);
         this._handleGesture(gesture);
       };
 
-      this.gestureController.onHandsDistanceChange = (dist) => {
+      gc.onHandsDistanceChange = (dist) => {
         if (this.currentMode === 'material') {
           this.interactions.material.onHandsDistance(dist);
         }
       };
 
-      this.gestureController.onClap = () => this._onClapSwitchArtifact();
+      gc.onClap = () => this._onClapSwitchArtifact();
 
       this.skeletonOverlay = new SkeletonOverlay(
         this.videoEl,
         document.getElementById('skeleton-overlay'),
-        this.gestureController
+        gc
       );
     } catch (err) {
+      if (!this.active || gen !== this._gestureInitGen) return;
       this.gestureController?.dispose();
       this.gestureController = null;
       console.warn('摄像头/手势识别不可用:', err.message);
@@ -157,7 +197,7 @@ export class AtlasSection {
       this.ui._applySectionHint('atlas', this.currentMode);
       if (this.ui.interactionHint) {
         this.ui.interactionHint.textContent +=
-          ' （摄像头未授权，可用右侧卡片切换模式预览）';
+          ' （摄像头未授权，仍可用鼠标预览交互）';
       }
     }
   }
@@ -187,20 +227,20 @@ export class AtlasSection {
     window.addEventListener('keydown', this._onKeydown);
   }
 
-  _startInteractionLoop() {
-    this._interactionRunning = true;
-    const tick = () => {
-      if (!this._interactionRunning) return;
-      this._interactionRafId = requestAnimationFrame(tick);
+  _onAtlasFrame(_dt) {
+    this.gestureController?.tickProcess();
+    this.skeletonOverlay?.draw();
 
-      const gc = this.gestureController ?? null;
-      if (this.currentMode === 'deconstruct') {
-        this.interactions.deconstruct?.update(gc);
-      }
-      if (this.currentMode === 'material') {
-        this.interactions.material?.update();
-      }
-    };
-    tick();
+    const gc = this.gestureController ?? null;
+    if (this.currentMode === 'deconstruct') {
+      this.interactions.deconstruct?.update(gc);
+    }
+    if (this.currentMode === 'material') {
+      this.interactions.material?.update();
+    }
+  }
+
+  _onAtlasDetect() {
+    this.gestureController?.tickDetect();
   }
 }

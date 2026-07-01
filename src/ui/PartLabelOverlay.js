@@ -11,6 +11,8 @@ const VIEW_MARGIN = 36;
 /** 标签块半高估算（translateY -50% 中心定位） */
 const LABEL_HALF_H = 22;
 const DOT_R = 2.5;
+/** 质心投影与避让：每 N 帧重算一次 */
+const LABEL_REPROJECT_INTERVAL = 4;
 
 function smoothstep(t) {
   const x = Math.max(0, Math.min(1, t));
@@ -45,6 +47,10 @@ export class PartLabelOverlay {
     this._animate = false;
     /** @type {Map<string, HTMLElement>} */
     this._labelEls = new Map();
+    this._reprojectCounter = 0;
+    /** @type {Array<object>|null} */
+    this._cachedLabels = null;
+    this._cachedStageW = 0;
   }
 
   setVisible(show) {
@@ -60,6 +66,7 @@ export class PartLabelOverlay {
     this.htmlLayer.replaceChildren();
     this._labelEls.clear();
     this._animate = false;
+    this._cachedLabels = null;
     this.htmlLayer.style.opacity = '0';
   }
 
@@ -106,57 +113,67 @@ export class PartLabelOverlay {
     const h = rect.height;
     if (w <= 0 || h <= 0) return;
 
-    const leftDock = [];
-    const rightDock = [];
+    this._reprojectCounter += 1;
+    const shouldReproject =
+      this._reprojectCounter % LABEL_REPROJECT_INTERVAL === 0 ||
+      !this._cachedLabels;
 
-    for (const [partId, worldPos] of Object.entries(pointCloud.getPartAnchorWorldPositions())) {
-      const meta = resolvePieceMeta(relic, partId);
-      if (!meta?.name) continue;
+    if (shouldReproject) {
+      const leftDock = [];
+      const rightDock = [];
 
-      this._projectVec.copy(worldPos);
-      this._projectVec.project(camera);
-      if (this._projectVec.z > 1) continue;
+      for (const [partId, worldPos] of Object.entries(pointCloud.getPartAnchorWorldPositions())) {
+        const meta = resolvePieceMeta(relic, partId);
+        if (!meta?.name) continue;
 
-      const sx = (this._projectVec.x * 0.5 + 0.5) * w;
-      const sy = (-this._projectVec.y * 0.5 + 0.5) * h;
+        this._projectVec.copy(worldPos);
+        this._projectVec.project(camera);
+        if (this._projectVec.z > 1) continue;
 
-      const item = {
-        partId,
-        name: meta.name,
-        order: meta.order,
-        sub: `${formatPartKey(partId)} · ${era}分铸件`,
-        sx,
-        sy,
-        expectedY: sy,
-        labelY: sy,
-        compact: false,
-      };
-      if (sx <= w * 0.5) leftDock.push(item);
-      else rightDock.push(item);
+        const sx = (this._projectVec.x * 0.5 + 0.5) * w;
+        const sy = (-this._projectVec.y * 0.5 + 0.5) * h;
+
+        const item = {
+          partId,
+          name: meta.name,
+          order: meta.order,
+          sub: `${formatPartKey(partId)} · ${era}分铸件`,
+          sx,
+          sy,
+          expectedY: sy,
+          labelY: sy,
+          compact: false,
+        };
+        if (sx <= w * 0.5) leftDock.push(item);
+        else rightDock.push(item);
+      }
+
+      const leftX = DOCK_MARGIN;
+      const rightX = w - DOCK_MARGIN;
+
+      this._resolveLabelAvoidance(leftDock, h);
+      this._resolveLabelAvoidance(rightDock, h);
+
+      this._cachedLabels = [
+        ...leftDock.map((lb) => ({
+          ...lb,
+          dockX: leftX,
+          side: 'left',
+          dotX: leftX + DOT_R,
+        })),
+        ...rightDock.map((lb) => ({
+          ...lb,
+          dockX: rightX,
+          side: 'right',
+          dotX: rightX - DOT_R,
+        })),
+      ];
+      this._cachedStageW = w;
     }
 
-    const leftX = DOCK_MARGIN;
-    const rightX = w - DOCK_MARGIN;
-
-    this._resolveLabelAvoidance(leftDock, h);
-    this._resolveLabelAvoidance(rightDock, h);
-
-    const labels = [
-      ...leftDock.map((lb) => ({
-        ...lb,
-        dockX: leftX,
-        side: 'left',
-        dotX: leftX + DOT_R,
-      })),
-      ...rightDock.map((lb) => ({
-        ...lb,
-        dockX: rightX,
-        side: 'right',
-        dotX: rightX - DOT_R,
-      })),
-    ];
-
-    this._renderHtmlLabels(labels, w);
+    if (this._cachedLabels?.length) {
+      this._renderHtmlLabels(this._cachedLabels, this._cachedStageW || w);
+    }
   }
 
   /** 金线卷轴展开：width 0 → 160px，时长见 CSS --pl-line-duration（默认 0.5s） */

@@ -4,8 +4,8 @@
  * 位移硬上限 MAX_DISPLACEMENT × UNIT
  */
 
-/** 表面采样总数 — 改此一处，五件文物统一生效（上限可提到 50000） */
-export const PARTICLE_COUNT = 30000;
+/** 表面采样总数 — 改此一处，五件文物统一生效 */
+export const PARTICLE_COUNT = 15000;
 export const PARTICLE_COUNT_MAX = 50000;
 
 /** 全局默认参数 — 克制的考古式解构 */
