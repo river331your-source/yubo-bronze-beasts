@@ -18,6 +18,7 @@ class App {
         home: new HomeSection({
           enterBtn: document.getElementById('enter-btn'),
           onRequestAtlas: () => this.router.switchSection('atlas'),
+          getAtlasSection: () => this.router.sections.atlas,
         }),
         atlas: new AtlasSection({
           canvas: document.getElementById('webgl-canvas'),

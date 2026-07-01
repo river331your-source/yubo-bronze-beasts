@@ -1904,3 +1904,126 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== 青铜开幕转场 · 双扇青铜门 ===== */
+
+.bronze-gate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* 双门结构：左右各半屏，青铜质感 + 内阴影立体 */
+.bronze-gate-door {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: linear-gradient(135deg, #3a3520, #1a1810, #2a2618);
+  will-change: transform;
+  transform: translateX(0);
+  z-index: 2;
+}
+
+.bronze-gate-door--left {
+  left: 0;
+  border-right: 2px solid #c9a84c;
+  box-shadow:
+    inset -14px 0 36px rgba(0, 0, 0, 0.72),
+    inset 0 0 100px rgba(0, 0, 0, 0.45);
+}
+
+.bronze-gate-door--right {
+  right: 0;
+  border-left: 2px solid #c9a84c;
+  box-shadow:
+    inset 14px 0 36px rgba(0, 0, 0, 0.72),
+    inset 0 0 100px rgba(0, 0, 0, 0.45);
+}
+
+.bronze-gate-knocker-wrap {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: min(22vw, 140px);
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.bronze-gate-knocker-wrap--mirror {
+  transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.bronze-gate-knocker {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 门缝金光：竖条发光，殿内光溢出 */
+.bronze-gate-seam-light {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 0;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(232, 203, 106, 0.35) 20%,
+    #e8cb6a 50%,
+    rgba(232, 203, 106, 0.35) 80%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 48px 16px rgba(232, 203, 106, 0.55),
+    0 0 120px 40px rgba(232, 203, 106, 0.25);
+  filter: blur(6px);
+  opacity: 1;
+  pointer-events: none;
+  transition:
+    width 0.6s ease-out,
+    opacity 0.6s ease-out,
+    filter 0.6s ease-out;
+}
+
+.bronze-gate-seam-light--reveal {
+  width: 60px;
+}
+
+/* 开门缓动：先慢后快，有青铜门重量感 */
+.bronze-gate-overlay--opening .bronze-gate-door--left {
+  transform: translateX(-100%);
+  transition: transform 1.4s cubic-bezier(0.6, 0, 0.2, 1);
+}
+
+.bronze-gate-overlay--opening .bronze-gate-door--right {
+  transform: translateX(100%);
+  transition: transform 1.4s cubic-bezier(0.6, 0, 0.2, 1);
+}
+
+.bronze-gate-overlay--opening .bronze-gate-seam-light {
+  width: 100%;
+  opacity: 0;
+  filter: blur(24px);
+  transition:
+    width 1.4s cubic-bezier(0.6, 0, 0.2, 1),
+    opacity 1.4s cubic-bezier(0.6, 0, 0.2, 1),
+    filter 1.4s cubic-bezier(0.6, 0, 0.2, 1);
+}
+
+.bronze-gate-overlay--opening .bronze-gate-knocker-wrap {
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.enter-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+  pointer-events: none;
+}

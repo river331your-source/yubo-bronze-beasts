@@ -66,9 +66,26 @@ export class SceneManager {
   }
 
   startLoop() {
-    if (this._running) return;
+    if (this._running) {
+      performanceMonitor.registerLoop('main');
+      return;
+    }
     performanceMonitor.clearLoops();
     this._startLoop();
+  }
+
+  /** 转场结束后兜底：确保 RAF 循环与性能监测注册仍在 */
+  ensureLoopRunning() {
+    if (!this.canvas || !this.renderer) return false;
+    if (this._running) {
+      performanceMonitor.registerLoop('main');
+      console.log('[SceneManager] 渲染循环运行中 RAF×1');
+      return true;
+    }
+    console.log('[SceneManager] 渲染循环已重启 startLoop()');
+    performanceMonitor.clearLoops();
+    this._startLoop();
+    return true;
   }
 
   stopLoop() {
