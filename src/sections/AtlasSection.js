@@ -5,6 +5,7 @@ import { MaterialRestoreInteraction } from '../interactions/MaterialRestoreInter
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
 import { logAtlasViewportDiagnostics } from '../debug/atlasViewportDiagnostics.js';
+import { performanceMonitor } from '../debug/PerformanceMonitor.js';
 
 /** 神兽图鉴：五件青铜器 + 三种交互模式 + 手势 */
 export class AtlasSection {
@@ -29,6 +30,7 @@ export class AtlasSection {
     this._enterGen = 0;
     this._readyResolve = null;
     this._readyPromise = Promise.resolve();
+    this._visitCount = 0;
   }
 
   /** 图鉴就绪：WebGL 循环已启动且至少渲染一帧 */
@@ -64,10 +66,11 @@ export class AtlasSection {
     });
   }
 
-  /** onEnter: 创建 Three.js 场景、加载 FBX、启用手势与解构交互 */
+  /** onEnter: 显示版块 → resize → startLoop → 模型显示（每次进入均重启循环） */
   async onEnter() {
     if (this.active) return;
     const enterGen = ++this._enterGen;
+    const visitN = ++this._visitCount;
     this.active = true;
     this._resetReadyPromise();
 
@@ -77,7 +80,7 @@ export class AtlasSection {
       return;
     }
 
-    // 确保图鉴 shell 已显示后再测量 viewport（避免 buffer 0×0 白屏）
+    // ① 显示版块，等待布局稳定后再测量 canvas
     this.ui.sectionVisibility.showStage('atlas');
     this.ui.clapFlash?.classList.remove('active', 'fade');
     logAtlasViewportDiagnostics('AtlasSection.before-rAF');
@@ -85,46 +88,45 @@ export class AtlasSection {
     if (!this._isEnterCurrent(enterGen)) return;
     logAtlasViewportDiagnostics('AtlasSection.after-rAF');
 
-    if (this.sceneManager) {
-      this.sceneManager.dispose();
-      this.sceneManager = null;
-      this.ui.atlasSceneManager = null;
+    const reusing = this._canReuseSceneManager();
+    console.log(`[AtlasSection] onEnter — 第 ${visitN} 次进入`, { reusing });
+
+    if (!reusing) {
+      this._teardownSceneManager();
+      this.sceneManager = new SceneManager(this.canvas);
+      this.ui.atlasSceneManager = this.sceneManager;
     }
 
-    this.sceneManager = new SceneManager(this.canvas);
-    this.ui.atlasSceneManager = this.sceneManager;
-    this.interactions = {
-      deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
-      material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
-    };
-
+    this._ensureInteractions();
     this._bindKeyboard();
 
-    // ① 立即启动 WebGL 渲染循环（模型加载期间门后照常渲染，转场层不介入）
     this.sceneManager.addFrameListener(this._atlasFrameListener);
     this.sceneManager.addPostFrameListener(this._atlasDetectListener);
-    this.sceneManager.startLoop();
-    console.log('[AtlasSection] startLoop() 已调用 — 渲染循环应在门后运行', {
-      running: this.sceneManager._running,
-    });
-    logAtlasViewportDiagnostics('AtlasSection.loopStarted(early)', this.sceneManager);
 
+    // ② 确保 canvas 尺寸正确 → ③ 启动渲染循环（每次进入必调 startLoop）
     this.ui._scheduleAtlasResize();
     this.sceneManager.resize();
+    this.sceneManager.startLoop();
+    this._logRafState(visitN, 'startLoop 已调用');
+    logAtlasViewportDiagnostics('AtlasSection.loopStarted', this.sceneManager);
 
-    await this.sceneManager.loadArtifact(DEFAULT_ARTIFACT_INDEX);
-    if (!this._isEnterCurrent(enterGen)) return;
+    if (!reusing) {
+      await this.sceneManager.loadArtifact(DEFAULT_ARTIFACT_INDEX);
+      if (!this._isEnterCurrent(enterGen)) return;
+      this.ui.selectArtifact(DEFAULT_ARTIFACT_INDEX);
+      this.ui.updateArtifactInfo(this.sceneManager.getCurrentArtifact());
+      this.currentMode = 'deconstruct';
+      this.switchMode('deconstruct');
+    } else {
+      const idx = this.sceneManager.currentIndex ?? DEFAULT_ARTIFACT_INDEX;
+      this.ui.selectArtifact(idx);
+      this.ui.updateArtifactInfo(this.sceneManager.getCurrentArtifact());
+      this.switchMode(this.currentMode || 'deconstruct');
+    }
 
-    const artifact = this.sceneManager.getCurrentArtifact();
-
-    this.ui.selectArtifact(DEFAULT_ARTIFACT_INDEX);
-    this.ui.updateArtifactInfo(artifact);
-    this.currentMode = 'deconstruct';
-    this.switchMode('deconstruct');
     this.ui.syncArtifactStages();
     this.ui.logSectionState('AtlasSection.onEnter');
 
-    this.sceneManager.resize();
     await new Promise((r) => requestAnimationFrame(r));
     if (!this._isEnterCurrent(enterGen)) return;
     this.sceneManager.resize();
@@ -134,11 +136,8 @@ export class AtlasSection {
     await new Promise((r) => requestAnimationFrame(r));
     if (!this._isEnterCurrent(enterGen)) return;
     this._markReady();
-    console.log('[AtlasSection] 图鉴就绪 — RAF 应显示×1', {
-      running: this.sceneManager._running,
-    });
+    this._logRafState(visitN, '图鉴就绪');
 
-    // ② 摄像头 + MediaPipe 异步初始化，失败也不阻塞画面
     this._initGestureAsync();
 
     window.setTimeout(() => {
@@ -148,11 +147,45 @@ export class AtlasSection {
     }, 2000);
   }
 
+  _canReuseSceneManager() {
+    return !!(this.sceneManager?.renderer && this.sceneManager?.scene);
+  }
+
+  _ensureInteractions() {
+    if (!this.sceneManager) return;
+    this.interactions = {
+      deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
+      material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
+    };
+  }
+
+  _teardownSceneManager() {
+    this.sceneManager?.dispose();
+    this.sceneManager = null;
+    this.ui.atlasSceneManager = null;
+  }
+
+  _logRafState(visitN, label) {
+    const loops = performanceMonitor.getActiveLoopNames();
+    const count = loops.length;
+    console.log(`[AtlasSection] ${label} — 第 ${visitN} 次进入`, {
+      sceneLoopRunning: this.sceneManager?._running ?? false,
+      rafCount: count,
+      rafOk: count === 1,
+      rafLoops: loops,
+    });
+  }
+
+  /** 应用销毁 / HMR：彻底释放 WebGL */
+  dispose() {
+    this._teardownSceneManager();
+  }
+
   _isEnterCurrent(gen) {
     return this.active && gen === this._enterGen;
   }
 
-  /** onLeave: 停止 rAF、释放 WebGL、关闭摄像头 */
+  /** onLeave: 暂停 RAF、关闭手势；场景/renderer 保留供下次复用 */
   onLeave() {
     if (!this.active) return;
     this.active = false;
@@ -177,9 +210,12 @@ export class AtlasSection {
     this.gestureController?.dispose();
     this.gestureController = null;
 
-    this.sceneManager?.dispose();
-    this.sceneManager = null;
-    this.ui.atlasSceneManager = null;
+    if (this.sceneManager) {
+      this.sceneManager.pauseLoop();
+      console.log('[AtlasSection] onLeave — 循环已暂停，场景保留可复用', {
+        hasRenderer: !!this.sceneManager.renderer,
+      });
+    }
 
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');

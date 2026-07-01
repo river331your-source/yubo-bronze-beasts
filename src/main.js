@@ -76,6 +76,7 @@ class App {
     if (section && this.router.sections[section]) {
       this.router.sections[section].onLeave?.();
     }
+    this.router.sections.atlas?.dispose?.();
     this.router.currentSection = null;
     performanceMonitor.dispose();
   }

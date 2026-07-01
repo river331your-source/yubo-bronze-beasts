@@ -68,10 +68,23 @@ export class SceneManager {
   startLoop() {
     if (this._running) {
       performanceMonitor.registerLoop('main');
+      console.log('[SceneManager] startLoop — 已在运行，补注册 RAF×1');
       return;
     }
     performanceMonitor.clearLoops();
     this._startLoop();
+    console.log('[SceneManager] startLoop — 新循环已启动 _running=true');
+  }
+
+  /** 离开图鉴：仅暂停 RAF，保留场景/相机/renderer 供下次复用 */
+  pauseLoop() {
+    this._running = false;
+    performanceMonitor.unregisterLoop('main');
+    if (this._rafId != null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+    console.log('[SceneManager] pauseLoop — _running 已重置，下次 startLoop 可重启');
   }
 
   /** 转场结束后兜底：确保 RAF 循环与性能监测注册仍在 */
@@ -89,14 +102,9 @@ export class SceneManager {
   }
 
   stopLoop() {
+    this.pauseLoop();
     this._frameListeners.clear();
     this._postFrameListeners.clear();
-    this._running = false;
-    performanceMonitor.unregisterLoop('main');
-    if (this._rafId != null) {
-      cancelAnimationFrame(this._rafId);
-      this._rafId = null;
-    }
   }
 
   /** 异步加载 IBL 环境（HDRI 优先，无文件则用 RoomEnvironment） */

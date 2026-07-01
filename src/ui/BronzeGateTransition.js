@@ -90,6 +90,8 @@ export class BronzeGateTransition {
   }
 
   destroy() {
+    this.root?.classList.remove('bronze-gate-overlay--opening');
+    this._seamLight?.classList.remove('bronze-gate-seam-light--reveal');
     this.root?.remove();
     this.root = null;
     this._seamLight = null;
