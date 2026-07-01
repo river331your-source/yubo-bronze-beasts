@@ -1,24 +1,23 @@
-/** 默认器物线稿（后续可按文物切换 src） */
-const DEFAULT_LINEART_SRC = '/patterns/artifacts/shenshou_lines.png';
-
 /**
  * 纹样探秘 · 器物线稿手电筒
  * 双层叠加（暗层 + 染金层）+ CSS mask 遮罩跟随鼠标/触屏/手势
  */
 export class PatternFlashlightInteraction {
   /**
-   * @param {{ stageEl: HTMLElement, getArtifact?: () => object | null }} opts
+   * @param {{ stageEl: HTMLElement, getVessel?: () => object | null }} opts
    */
-  constructor({ stageEl, getArtifact }) {
+  constructor({ stageEl, getVessel }) {
     this.stageEl = stageEl;
-    this.getArtifact = getArtifact ?? (() => null);
+    this.getVessel = getVessel ?? (() => null);
 
+    this.lineartStack = stageEl.querySelector('.pattern-lineart-stack');
     this.dimLayer = stageEl.querySelector('.pattern-lineart--dim');
     this.goldLayer = stageEl.querySelector('.pattern-lineart--gold');
 
     this.active = false;
     this._torchVisible = false;
     this._gestureFlashlight = false;
+    this._currentVesselId = null;
 
     this._onMouseMove = (e) => {
       if (!this.active) return;
@@ -43,8 +42,8 @@ export class PatternFlashlightInteraction {
 
   activate() {
     this.active = true;
-    const artifact = this.getArtifact();
-    if (artifact) this.setArtifact(artifact);
+    const vessel = this.getVessel();
+    if (vessel) this.setVessel(vessel);
     this._hideTorch();
   }
 
@@ -54,10 +53,36 @@ export class PatternFlashlightInteraction {
     this._hideTorch();
   }
 
-  setArtifact(_artifact) {
-    // 暂用青铜神兽线稿；后续可按文物 id 映射不同 PNG
-    this.dimLayer?.setAttribute('src', DEFAULT_LINEART_SRC);
-    this.goldLayer?.setAttribute('src', DEFAULT_LINEART_SRC);
+  /**
+   * 器物切换：底层与金色层同步换线稿 PNG
+   * @param {{ id: string, name: string, lineartSrc: string }} vessel
+   */
+  setVessel(vessel) {
+    if (!vessel?.lineartSrc) return;
+    if (this._currentVesselId === vessel.id) return;
+
+    this._currentVesselId = vessel.id;
+    const src = vessel.lineartSrc;
+
+    // 器物切换：双层叠加同时更新 src
+    if (this.dimLayer) {
+      this.dimLayer.src = src;
+      this.dimLayer.alt = `${vessel.name}线稿`;
+    }
+    if (this.goldLayer) {
+      this.goldLayer.src = src;
+    }
+
+    this.lineartStack?.classList.add('pattern-lineart-stack--switching');
+    window.setTimeout(() => {
+      this.lineartStack?.classList.remove('pattern-lineart-stack--switching');
+    }, 220);
+
+    this._hideTorch();
+  }
+
+  getCurrentVesselId() {
+    return this._currentVesselId;
   }
 
   /**

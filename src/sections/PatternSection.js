@@ -1,45 +1,55 @@
 import { GestureController } from '../interactions/GestureController.js';
 import { PatternFlashlightInteraction } from '../interactions/PatternFlashlightInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
-import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
+import {
+  DEFAULT_PATTERN_VESSEL_INDEX,
+  PATTERN_VESSELS,
+  getPatternVessel,
+} from '../data/pattern-vessels.js';
 import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
 
-/** 纹样探秘：母题线稿 + 手电筒手势（独立 WebGL / 摄像头生命周期） */
+/** 纹样探秘：器物线稿手电筒 + 两件器物切换 */
 export class PatternSection {
-  constructor({ torchStage, videoEl, ui }) {
+  constructor({ torchStage, vesselSwitcher, videoEl, ui }) {
     this.torchStage = torchStage;
+    this.vesselSwitcher = vesselSwitcher;
+    this.vesselPrevBtn = vesselSwitcher?.querySelector('#pattern-vessel-prev');
+    this.vesselNextBtn = vesselSwitcher?.querySelector('#pattern-vessel-next');
+    this.vesselLabel = vesselSwitcher?.querySelector('#pattern-vessel-label');
     this.videoEl = videoEl;
     this.ui = ui;
 
     this.active = false;
-    this.artifactIndex = DEFAULT_ARTIFACT_INDEX;
+    this.vesselIndex = DEFAULT_PATTERN_VESSEL_INDEX;
     this.flashlight = null;
     this.gestureController = null;
     this.skeletonOverlay = null;
     this._onKeydown = null;
+    this._onVesselPrev = null;
+    this._onVesselNext = null;
     this._patternFrameListener = () => this._onPatternFrame();
     this._patternDetectListener = () => this._onPatternDetect();
     this._gestureInitGen = 0;
   }
 
-  /** onEnter: 线稿视图 + 手电筒手势 */
+  /** onEnter: 线稿舞台 + 手电筒 + 器物切换器 */
   async onEnter() {
     if (this.active) return;
     this.active = true;
 
     this.flashlight = new PatternFlashlightInteraction({
       stageEl: this.torchStage,
-      getArtifact: () => ARTIFACTS[this.artifactIndex],
+      getVessel: () => getPatternVessel(this.vesselIndex),
     });
     this.flashlight.activate();
 
-    this.ui.selectArtifact(this.artifactIndex);
+    this.switchPatternVessel(DEFAULT_PATTERN_VESSEL_INDEX);
     this.ui._applySectionHint('pattern');
     this.ui.syncArtifactStages();
 
     this._bindKeyboard();
+    this._bindVesselSwitcher();
 
-    // 先启动主循环（线稿/手电不依赖摄像头）
     startMainLoop('pattern', this._patternFrameListener, this._patternDetectListener);
     this._initGestureAsync();
   }
@@ -57,6 +67,8 @@ export class PatternSection {
       this._onKeydown = null;
     }
 
+    this._unbindVesselSwitcher();
+
     this.flashlight?.dispose();
     this.flashlight = null;
 
@@ -70,17 +82,72 @@ export class PatternSection {
     this.ui.updateGestureLabel('none');
   }
 
-  async loadArtifact(index) {
+  /**
+   * 器物切换：更新双层线稿与切换器文案（下一步在此 id 上接热区数据）
+   * @param {number} index
+   */
+  switchPatternVessel(index) {
+    this.vesselIndex = ((index % PATTERN_VESSELS.length) + PATTERN_VESSELS.length) % PATTERN_VESSELS.length;
+    const vessel = getPatternVessel(this.vesselIndex);
+
+    this.flashlight?.setVessel(vessel);
+    this._updateVesselSwitcherUI(vessel);
+  }
+
+  /** 按器物 id 切换（供下一步热区 / 档案卡联动） */
+  switchPatternVesselById(id) {
+    const index = PATTERN_VESSELS.findIndex((v) => v.id === id);
+    if (index >= 0) this.switchPatternVessel(index);
+  }
+
+  getCurrentPatternVessel() {
+    return getPatternVessel(this.vesselIndex);
+  }
+
+  /** 兼容 AppRouter.loadArtifact：纹样探秘仅映射前两件器物 */
+  loadArtifact(index) {
     if (!this.active) return;
-    this.artifactIndex = index;
-    const artifact = ARTIFACTS[index];
-    this.ui.updateArtifactInfo(artifact);
-    this.flashlight?.setArtifact(artifact);
+    if (index >= 0 && index < PATTERN_VESSELS.length) {
+      this.switchPatternVessel(index);
+    }
   }
 
   /** 供外部驱动光斑（金色图层局部像素坐标） */
   setTorchPos(x, y) {
     this.flashlight?.setTorchPos(x, y);
+  }
+
+  _updateVesselSwitcherUI(vessel) {
+    if (this.vesselLabel) {
+      this.vesselLabel.textContent = vessel.name;
+    }
+    this.vesselSwitcher?.querySelectorAll('[data-vessel-id]').forEach((btn) => {
+      const active = btn.dataset.vesselId === vessel.id;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  _bindVesselSwitcher() {
+    this._onVesselPrev = () => this.switchPatternVessel(this.vesselIndex - 1);
+    this._onVesselNext = () => this.switchPatternVessel(this.vesselIndex + 1);
+    this._onVesselTabClick = (e) => {
+      const tab = e.target.closest('[data-vessel-id]');
+      if (tab) this.switchPatternVesselById(tab.dataset.vesselId);
+    };
+
+    this.vesselPrevBtn?.addEventListener('click', this._onVesselPrev);
+    this.vesselNextBtn?.addEventListener('click', this._onVesselNext);
+    this.vesselSwitcher?.addEventListener('click', this._onVesselTabClick);
+  }
+
+  _unbindVesselSwitcher() {
+    this.vesselPrevBtn?.removeEventListener('click', this._onVesselPrev);
+    this.vesselNextBtn?.removeEventListener('click', this._onVesselNext);
+    this.vesselSwitcher?.removeEventListener('click', this._onVesselTabClick);
+    this._onVesselPrev = null;
+    this._onVesselNext = null;
+    this._onVesselTabClick = null;
   }
 
   _initGestureAsync() {
@@ -131,10 +198,15 @@ export class PatternSection {
   _bindKeyboard() {
     this._onKeydown = (e) => {
       if (!this.active) return;
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= ARTIFACTS.length) {
-        this.loadArtifact(n - 1);
-        this.ui.selectArtifact(n - 1);
+      if (e.key === 'ArrowLeft') {
+        this.switchPatternVessel(this.vesselIndex - 1);
+      } else if (e.key === 'ArrowRight') {
+        this.switchPatternVessel(this.vesselIndex + 1);
+      } else {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= PATTERN_VESSELS.length) {
+          this.switchPatternVessel(n - 1);
+        }
       }
     };
     window.addEventListener('keydown', this._onKeydown);

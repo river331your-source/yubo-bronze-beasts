@@ -209,7 +209,7 @@
             </div>
 
             <div id="section-pattern" class="scene-stage scene-stage--pattern section-hidden">
-              <!-- 纹样探秘舞台：双层线稿 + 手电筒遮罩（见 style.css / PatternFlashlightInteraction） -->
+              <!-- 纹样探秘舞台：双层线稿 + 手电筒遮罩 -->
               <div class="pattern-torch-stage" id="pattern-torch-stage">
                 <div class="pattern-torch-layers">
                   <div class="pattern-lineart-stack">
@@ -229,6 +229,49 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 器物切换：神兽 / 觥 -->
+              <nav class="pattern-vessel-switcher" id="pattern-vessel-switcher" aria-label="切换器物">
+                <button
+                  type="button"
+                  class="pattern-vessel-btn"
+                  id="pattern-vessel-prev"
+                  aria-label="上一件器物"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <div class="pattern-vessel-center">
+                  <p class="pattern-vessel-label" id="pattern-vessel-label">青铜神兽</p>
+                  <div class="pattern-vessel-tabs" role="tablist" aria-label="器物快选">
+                    <button
+                      type="button"
+                      class="pattern-vessel-tab active"
+                      data-vessel-id="shenshou"
+                      role="tab"
+                      aria-selected="true"
+                    >
+                      神兽
+                    </button>
+                    <button
+                      type="button"
+                      class="pattern-vessel-tab"
+                      data-vessel-id="gong"
+                      role="tab"
+                      aria-selected="false"
+                    >
+                      觥
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="pattern-vessel-btn"
+                  id="pattern-vessel-next"
+                  aria-label="下一件器物"
+                >
+                  <span aria-hidden="true">›</span>
+                </button>
+              </nav>
             </div>
 
             <div class="stage-overlays">

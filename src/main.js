@@ -26,6 +26,7 @@ class App {
         }),
         pattern: new PatternSection({
           torchStage: document.getElementById('pattern-torch-stage'),
+          vesselSwitcher: document.getElementById('pattern-vessel-switcher'),
           videoEl: document.getElementById('camera-feed'),
           ui: this.ui,
         }),
