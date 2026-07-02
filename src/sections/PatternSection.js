@@ -50,6 +50,7 @@ export class PatternSection {
     this._bindKeyboard();
     this._bindVesselSwitcher();
 
+    stopMainLoop();
     startMainLoop('pattern', this._patternFrameListener, this._patternDetectListener);
     this._initGestureAsync();
   }
@@ -202,6 +203,8 @@ export class PatternSection {
         this.switchPatternVessel(this.vesselIndex - 1);
       } else if (e.key === 'ArrowRight') {
         this.switchPatternVessel(this.vesselIndex + 1);
+      } else if (e.key === 'h' || e.key === 'H') {
+        this.flashlight?.toggleHotspotDebug?.();
       } else {
         const n = parseInt(e.key, 10);
         if (n >= 1 && n <= PATTERN_VESSELS.length) {

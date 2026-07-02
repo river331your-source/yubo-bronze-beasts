@@ -1,6 +1,8 @@
 /**
  * MediaPipe 手部 21 关键点 — 由主循环驱动 draw()，不自建 RAF
  */
+const SKELETON_DRAW_INTERVAL = 2;
+
 export class SkeletonOverlay {
   constructor(videoEl, canvasEl, gestureController) {
     this.video = videoEl;
@@ -8,31 +10,64 @@ export class SkeletonOverlay {
     this.gesture = gestureController;
     this.ctx = canvasEl.getContext('2d');
     this.running = true;
+    this._drawFrame = 0;
+    this._lastSize = { w: 0, h: 0, dpr: 0 };
+    this._cleared = false;
   }
 
   draw() {
     if (!this.running) return;
-    this._draw();
+
+    this._drawFrame += 1;
+    if (this._drawFrame % SKELETON_DRAW_INTERVAL !== 0) return;
+
+    const hands = this.gesture.getDisplayLandmarks();
+    if (!hands?.length) {
+      if (!this._cleared) {
+        this._ensureCanvasSize();
+        const { w, h } = this._lastSize;
+        if (w > 0 && h > 0) {
+          this.ctx.clearRect(0, 0, w, h);
+        }
+        this._cleared = true;
+      }
+      return;
+    }
+
+    this._cleared = false;
+    this._draw(hands);
   }
 
-  _draw() {
+  _ensureCanvasSize() {
     const { video, canvas, ctx } = this;
-    if (!video.videoWidth) return;
+    if (!video.videoWidth) return false;
 
     const w = video.clientWidth;
     const h = video.clientHeight;
-    if (w === 0 || h === 0) return;
+    if (w === 0 || h === 0) return false;
 
     const dpr = Math.min(window.devicePixelRatio, 2);
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { w: lastW, h: lastH, dpr: lastDpr } = this._lastSize;
 
+    if (w !== lastW || h !== lastH || dpr !== lastDpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this._lastSize = { w, h, dpr };
+    }
+
+    return true;
+  }
+
+  _draw(hands) {
+    if (!this._ensureCanvasSize()) return;
+
+    const { ctx } = this;
+    const { w, h } = this._lastSize;
     ctx.clearRect(0, 0, w, h);
 
-    const hands = this.gesture.getDisplayLandmarks() ?? [];
     hands.forEach((landmarks, handIdx) => {
       const hue = handIdx === 0 ? '#C9A84C' : '#6F9478';
       const joint = handIdx === 0 ? '#e8d090' : '#8fae94';

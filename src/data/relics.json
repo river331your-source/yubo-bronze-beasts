@@ -24,7 +24,7 @@
     "era": "西周",
     "thumbnail": "/images/relics/shoumian_fanggong.png",
     "pieces": {
-      "lid": { "name": "盖", "order": 1 },
+      "lid": { "name": "器盖", "order": 1 },
       "body": { "name": "器身", "order": 2 }
     }
   },
@@ -33,8 +33,8 @@
     "era": "西周",
     "thumbnail": "/images/relics/panlong_hu.png",
     "pieces": {
-      "lid": { "name": "盖", "order": 1 },
-      "spout": { "name": "流", "order": 2 },
+      "lid": { "name": "器盖", "order": 1 },
+      "spout": { "name": "龙形流", "order": 2 },
       "body": { "name": "器身", "order": 3 }
     }
   },
@@ -43,7 +43,7 @@
     "era": "西周",
     "thumbnail": "/images/relics/fu_yan_hu.png",
     "pieces": {
-      "lid": { "name": "盖", "order": 1 },
+      "lid": { "name": "器盖", "order": 1 },
       "body": { "name": "器身", "order": 2 }
     }
   }

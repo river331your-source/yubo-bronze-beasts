@@ -101,7 +101,7 @@ export const INTERACTION_MODES = {
   deconstruct: {
     id: 'deconstruct',
     label: '解构与重构',
-    hint: '握拳聚合 · 手势A拆解+标注 · 手势B消散 · 双手拍合切换文物',
+    hint: '握拳聚合 · 手势A拆解+标注 · 手势B消散',
   },
   pattern: {
     id: 'pattern',

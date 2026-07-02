@@ -22,20 +22,9 @@
         <div class="main-vignette" aria-hidden="true"></div>
 
         <header class="site-header">
-          <div class="site-brand" id="site-brand">
-            <svg class="site-brand-icon" viewBox="0 0 36 36" aria-hidden="true">
-              <path d="M18 3 L30 9 L30 15 L18 21 L6 15 L6 9 Z" fill="none" stroke="currentColor" stroke-width="0.9" />
-              <path d="M18 21 L30 27 L30 33 L18 33 L6 33 L6 27 Z" fill="none" stroke="currentColor" stroke-width="0.9" />
-              <path d="M14 12 L18 8 L22 12 L22 17 L18 20 L14 17 Z" fill="none" stroke="currentColor" stroke-width="0.7" />
-              <path d="M16 14 L18 12 L20 14" fill="none" stroke="currentColor" stroke-width="0.6" opacity="0.7" />
-              <line x1="6" y1="9" x2="30" y2="27" stroke="currentColor" stroke-width="0.5" opacity="0.35" />
-              <line x1="30" y1="9" x2="6" y2="27" stroke="currentColor" stroke-width="0.5" opacity="0.35" />
-            </svg>
-            <div class="site-brand-text">
-              <span class="site-brand-zh">豫博神兽录</span>
-              <span class="site-brand-en">YUBO SHENSHOULU</span>
-            </div>
-          </div>
+          <a class="nav-logo" href="#home" data-nav="home" aria-label="豫博青铜神兽录">
+            <img src="/images/logo-title.png" alt="豫博青铜神兽录" />
+          </a>
           <nav class="site-nav" aria-label="主导航">
             <button class="site-nav-item active" type="button" data-nav="home">
               <span class="site-nav-label">首页</span>
@@ -43,16 +32,16 @@
               <span class="site-nav-line" aria-hidden="true"></span>
             </button>
             <button class="site-nav-item" type="button" data-nav="atlas">
-              <span class="site-nav-label">神兽图鉴</span>
-              <span class="site-nav-en">BEAST ATLAS</span>
+              <span class="site-nav-label">形制溯源</span>
+              <span class="site-nav-en">FORM &amp; ORIGIN</span>
             </button>
             <button class="site-nav-item" type="button" data-nav="pattern">
-              <span class="site-nav-label">纹样探秘</span>
-              <span class="site-nav-en">PATTERN EXPLORATION</span>
+              <span class="site-nav-label">纹样解构</span>
+              <span class="site-nav-en">PATTERN DECODED</span>
             </button>
             <button class="site-nav-item" type="button" data-nav="craft">
-              <span class="site-nav-label">青铜工艺</span>
-              <span class="site-nav-en">BRONZE CRAFT</span>
+              <span class="site-nav-label">工艺解析</span>
+              <span class="site-nav-en">CRAFT DECODED</span>
             </button>
             <button class="site-nav-item" type="button" data-nav="story">
               <span class="site-nav-label">关于</span>
@@ -215,13 +204,13 @@
                   <div class="pattern-lineart-stack">
                     <img
                       class="pattern-lineart pattern-lineart--dim"
-                      src="/patterns/artifacts/shenshou_lines.png"
-                      alt="青铜神兽线稿"
+                      src="/patterns/artifacts/gong_lines.png"
+                      alt="妇好鸮尊线稿"
                       draggable="false"
                     />
                     <img
                       class="pattern-lineart pattern-lineart--gold"
-                      src="/patterns/artifacts/shenshou_lines.png"
+                      src="/patterns/artifacts/gong_lines.png"
                       alt=""
                       aria-hidden="true"
                       draggable="false"
@@ -230,7 +219,7 @@
                 </div>
               </div>
 
-              <!-- 器物切换：神兽 / 觥 -->
+              <!-- 器物切换：鸮尊 / 神兽 -->
               <nav class="pattern-vessel-switcher" id="pattern-vessel-switcher" aria-label="切换器物">
                 <button
                   type="button"
@@ -241,25 +230,25 @@
                   <span aria-hidden="true">‹</span>
                 </button>
                 <div class="pattern-vessel-center">
-                  <p class="pattern-vessel-label" id="pattern-vessel-label">青铜神兽</p>
+                  <p class="pattern-vessel-label" id="pattern-vessel-label">妇好鸮尊</p>
                   <div class="pattern-vessel-tabs" role="tablist" aria-label="器物快选">
                     <button
                       type="button"
                       class="pattern-vessel-tab active"
-                      data-vessel-id="shenshou"
+                      data-vessel-id="fuhao-xiao-zun"
                       role="tab"
                       aria-selected="true"
                     >
-                      神兽
+                      鸮尊
                     </button>
                     <button
                       type="button"
                       class="pattern-vessel-tab"
-                      data-vessel-id="gong"
+                      data-vessel-id="shenshou"
                       role="tab"
                       aria-selected="false"
                     >
-                      觥
+                      神兽
                     </button>
                   </div>
                 </div>

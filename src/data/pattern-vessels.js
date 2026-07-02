@@ -4,16 +4,16 @@
  */
 export const PATTERN_VESSELS = [
   {
+    id: 'fuhao-xiao-zun',
+    name: '妇好鸮尊',
+    shortName: '鸮尊',
+    lineartSrc: '/patterns/artifacts/gong_lines.png',
+  },
+  {
     id: 'shenshou',
     name: '青铜神兽',
     shortName: '神兽',
     lineartSrc: '/patterns/artifacts/shenshou_lines.png',
-  },
-  {
-    id: 'gong',
-    name: '兽面纹铜方觥',
-    shortName: '觥',
-    lineartSrc: '/patterns/artifacts/gong_lines.png',
   },
 ];
 

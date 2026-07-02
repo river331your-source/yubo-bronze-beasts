@@ -3,6 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { ARTIFACTS, MODEL_ASSET_REVISION } from '../data/artifacts.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
+import {
+  getMainLoopOwner,
+  isMainLoopRunning,
+  startMainLoop,
+  stopMainLoop,
+} from '../core/FrameLoop.js';
 import { createPlaceholderModel } from './PlaceholderFactory.js';
 import { PointCloudFromModel } from './PointCloudFromModel.js';
 import { loadSceneEnvironment } from './EnvironmentLoader.js';
@@ -66,38 +72,52 @@ export class SceneManager {
   }
 
   startLoop() {
-    if (this._running) {
-      performanceMonitor.registerLoop('main');
-      console.log('[SceneManager] startLoop — 已在运行，补注册 RAF×1');
-      return;
+    if (this._rafId != null) {
+      console.warn('[SceneManager] startLoop: 发现残留 rafId，先取消');
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
     }
-    performanceMonitor.clearLoops();
+
+    if (isMainLoopRunning()) {
+      const owner = getMainLoopOwner();
+      if (this._running && owner === 'atlas') {
+        performanceMonitor.registerLoop('main');
+        return;
+      }
+      console.warn(
+        `[SceneManager] startLoop: 已有主循环 "${owner ?? 'unknown'}" 运行，先停止后重启`
+      );
+      stopMainLoop();
+      this._running = false;
+    }
+
     this._startLoop();
-    console.log('[SceneManager] startLoop — 新循环已启动 _running=true');
+    console.log('[SceneManager] startLoop — 主循环已启动 (FrameLoop/atlas)');
   }
 
-  /** 离开图鉴：仅暂停 RAF，保留场景/相机/renderer 供下次复用 */
+  /** 离开图鉴：停止主循环，保留场景/相机/renderer 供下次复用 */
   pauseLoop() {
     this._running = false;
-    performanceMonitor.unregisterLoop('main');
+    if (isMainLoopRunning()) {
+      stopMainLoop();
+    }
     if (this._rafId != null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
-    console.log('[SceneManager] pauseLoop — _running 已重置，下次 startLoop 可重启');
+    performanceMonitor.unregisterLoop('main');
+    console.log('[SceneManager] pauseLoop — 主循环已停止');
   }
 
   /** 转场结束后兜底：确保 RAF 循环与性能监测注册仍在 */
   ensureLoopRunning() {
     if (!this.canvas || !this.renderer) return false;
-    if (this._running) {
+    if (this._running && isMainLoopRunning() && getMainLoopOwner() === 'atlas') {
       performanceMonitor.registerLoop('main');
-      console.log('[SceneManager] 渲染循环运行中 RAF×1');
       return true;
     }
-    console.log('[SceneManager] 渲染循环已重启 startLoop()');
-    performanceMonitor.clearLoops();
-    this._startLoop();
+    console.log('[SceneManager] ensureLoopRunning — 重启主循环');
+    this.startLoop();
     return true;
   }
 
@@ -519,29 +539,25 @@ export class SceneManager {
   _startLoop() {
     this._running = true;
     resetAtlasRenderCounter();
-    performanceMonitor.registerLoop('main');
     logAtlasViewportDiagnostics('startLoop', this);
-    const tick = () => {
-      if (!this._running) {
-        performanceMonitor.unregisterLoop('main');
-        return;
-      }
-      this._rafId = requestAnimationFrame(tick);
-      performanceMonitor.tickLoop('main');
-      const dt = this._clock.getDelta();
-      for (const fn of this._frameListeners) {
-        fn(dt);
-      }
-      this.pointCloud?.update(dt);
-      this.controls.update();
-      this.renderer.render(this.scene, this.camera);
-      tickAtlasRenderDiagnostics(this);
-      for (const fn of this._postFrameListeners) {
-        fn(dt);
-      }
-      this._tickFpsMonitor();
-    };
-    tick();
+    startMainLoop('atlas', () => this._runFrame());
+  }
+
+  _runFrame() {
+    if (!this._running) return;
+
+    const dt = this._clock.getDelta();
+    for (const fn of this._frameListeners) {
+      fn(dt);
+    }
+    this.pointCloud?.update(dt);
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+    tickAtlasRenderDiagnostics(this);
+    for (const fn of this._postFrameListeners) {
+      fn(dt);
+    }
+    this._tickFpsMonitor();
   }
 
   _disposeMaterial(material) {

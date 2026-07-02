@@ -4,6 +4,7 @@ import { DeconstructInteraction } from '../interactions/DeconstructInteraction.j
 import { MaterialRestoreInteraction } from '../interactions/MaterialRestoreInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
+import { stopMainLoop } from '../core/FrameLoop.js';
 import { logAtlasViewportDiagnostics } from '../debug/atlasViewportDiagnostics.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
 
@@ -106,6 +107,7 @@ export class AtlasSection {
     // ② 确保 canvas 尺寸正确 → ③ 启动渲染循环（每次进入必调 startLoop）
     this.ui._scheduleAtlasResize();
     this.sceneManager.resize();
+    stopMainLoop();
     this.sceneManager.startLoop();
     this._logRafState(visitN, 'startLoop 已调用');
     logAtlasViewportDiagnostics('AtlasSection.loopStarted', this.sceneManager);
@@ -216,6 +218,7 @@ export class AtlasSection {
         hasRenderer: !!this.sceneManager.renderer,
       });
     }
+    stopMainLoop();
 
     this.ui.showGestureUI(false);
     this.ui.updateGestureLabel('none');

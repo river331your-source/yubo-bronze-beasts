@@ -29,7 +29,6 @@ export class UIController {
   constructor() {
     this.mainPage = document.getElementById('main-page');
     this.enterBtn = document.getElementById('enter-btn');
-    this.siteBrand = document.getElementById('site-brand');
     this.sectionHome = document.getElementById('section-home');
     this.artifactNav = document.getElementById('artifact-nav');
     this.stageColumn = document.getElementById('stage-column');
@@ -69,10 +68,9 @@ export class UIController {
   }
 
   _bindEvents() {
-    this.siteBrand?.addEventListener('click', () => this.onNavSelect?.('home'));
-
-    this.mainPage.querySelectorAll('.site-nav-item[data-nav]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+    this.mainPage.querySelectorAll('.site-nav-item[data-nav], .nav-logo[data-nav]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
         this.onNavSelect?.(btn.dataset.nav);
       });
     });
@@ -175,7 +173,7 @@ export class UIController {
     } else if (isPattern) {
       this.sectionVisibility.showStage('pattern');
       this._applySectionHint('pattern');
-      this.interactionHint.hidden = false;
+      this._applyPatternHintVisibility();
       this.artifactInfo.hidden = true;
       this.materialTimeline.hidden = true;
     }
@@ -220,6 +218,17 @@ export class UIController {
         this.atlasSceneManager?.resize();
       });
     });
+  }
+
+  _applyPatternHintVisibility() {
+    const hintDebug = new URLSearchParams(location.search).has('hint');
+    if (this.interactionHint) {
+      this.interactionHint.hidden = !hintDebug;
+      this.interactionHint.classList.toggle('interaction-hint--force-show', hintDebug);
+    }
+    if (this.gestureStatus) {
+      this.gestureStatus.classList.toggle('gesture-status--force-show', hintDebug);
+    }
   }
 
   /** 提示语归属版块：atlas 用手势提示，pattern 用手电提示 */
@@ -317,7 +326,9 @@ export class UIController {
   }
 
   showGestureUI(show) {
-    if (this.gestureStatus) this.gestureStatus.hidden = !show;
+    const hintDebug = new URLSearchParams(location.search).has('hint');
+    const hidePatternStatus = this.currentSection === 'pattern' && !hintDebug;
+    if (this.gestureStatus) this.gestureStatus.hidden = !show || hidePatternStatus;
     const pip = document.getElementById('camera-pip');
     const feed = document.getElementById('camera-feed');
     if (pip) pip.classList.toggle('visible', show);

@@ -591,7 +591,7 @@ body {
 /* ── 顶部导航 ── */
 .site-header {
   display: grid;
-  grid-template-columns: 220px 1fr 130px;
+  grid-template-columns: auto 1fr 130px;
   align-items: center;
   flex: 0 0 var(--header-h);
   height: var(--header-h);
@@ -602,51 +602,31 @@ body {
   position: relative;
 }
 
-.site-brand {
+.nav-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--jijin);
-}
-
-.site-brand-icon {
-  width: 28px;
-  height: 28px;
+  align-self: center;
+  margin-right: 24px;
   flex-shrink: 0;
-  opacity: 0.92;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
 }
 
-.site-brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.site-brand-zh {
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  color: var(--jijin);
-  line-height: 1.15;
-}
-
-.site-brand-en {
-  font-family: var(--font-en);
-  font-size: 7.5px;
-  font-weight: 400;
-  letter-spacing: 0.28em;
-  color: var(--patina);
+.nav-logo:hover {
   opacity: 0.85;
-  text-transform: uppercase;
+}
+
+.nav-logo img {
+  display: block;
+  height: 38px;
+  width: auto;
 }
 
 .site-nav {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 36px;
   padding-top: 4px;
 }
@@ -1338,6 +1318,208 @@ body {
   opacity: 1;
 }
 
+.pattern-annotation {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.pattern-annotation.on {
+  opacity: 1;
+}
+
+.anno-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e8cb6a;
+  box-shadow: 0 0 0 2px rgba(8, 10, 8, 0.72);
+  transform: translate(-50%, -50%);
+}
+
+.anno-line {
+  --anno-line-len: 60px;
+  position: absolute;
+  top: 0;
+  height: 1px;
+  width: var(--anno-line-len);
+  background: linear-gradient(90deg, rgba(201, 168, 76, 0.9), rgba(201, 168, 76, 0.3));
+  transform: translateY(-50%) scaleX(0);
+  transition: transform 0.4s ease;
+}
+
+.pattern-annotation.is-right .anno-line {
+  left: 0;
+  transform-origin: left center;
+}
+
+.pattern-annotation.is-left .anno-line {
+  left: calc(var(--anno-line-len) * -1);
+  transform-origin: right center;
+}
+
+.pattern-annotation.on .anno-line {
+  transform: translateY(-50%) scaleX(1);
+}
+
+.anno-label {
+  position: absolute;
+  top: 0;
+  max-width: 190px;
+  padding: 8px 10px 9px;
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  border-radius: 10px;
+  background: rgba(8, 10, 8, 0.85);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.3s ease 0.15s;
+}
+
+.pattern-annotation.is-right .anno-label {
+  left: 68px;
+}
+
+.pattern-annotation.is-left .anno-label {
+  right: 68px;
+  text-align: right;
+}
+
+.pattern-annotation.on .anno-label {
+  opacity: 1;
+}
+
+.anno-label__tag {
+  margin: 0 0 4px;
+  color: #e8cb6a;
+  font-size: 15px;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+}
+
+.anno-label__text {
+  margin: 0;
+  color: #cfc9b4;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* 青铜神兽：右侧常显展签列（endpoint → line → label 三段链） */
+.shenshou-annotations {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.shenshou-anno-item {
+  position: absolute;
+  inset: 0;
+}
+
+/* 覆盖鸮尊 .anno-line 的 scaleX(0) / 固定宽度，恢复 SVG 引线 */
+.shenshou-annotations svg.anno-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  background: none;
+  transform: none;
+  transition: filter 0.25s ease;
+}
+
+.shenshou-annotations svg.anno-line polyline {
+  stroke: rgba(201, 168, 76, 0.4);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  transition:
+    stroke 0.25s ease,
+    stroke-width 0.25s ease,
+    filter 0.25s ease;
+}
+
+.shenshou-annotations svg.anno-line.active polyline {
+  stroke: #e8cb6a;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 4px rgba(232, 203, 106, 0.65));
+}
+
+.shenshou-annotations .anno-endpoint {
+  position: absolute;
+  z-index: 1;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(201, 168, 76, 0.25);
+  transform: translate(-50%, -50%);
+  transition:
+    background 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.shenshou-annotations .anno-endpoint.active {
+  background: #e8cb6a;
+  box-shadow: 0 0 8px rgba(232, 203, 106, 0.8);
+}
+
+.shenshou-annotations .anno-label {
+  position: absolute;
+  z-index: 1;
+  transform: translateY(-50%);
+  margin: 0;
+  padding: 2px 0;
+  color: rgba(201, 168, 76, 0.5);
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.shenshou-annotations .anno-label.active,
+.shenshou-anno-item.active .anno-label {
+  color: #e8cb6a;
+  text-shadow: 0 0 10px rgba(232, 203, 106, 0.45);
+}
+
+.pattern-hotspot-debug-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.pattern-hotspot-debug-marker {
+  position: absolute;
+  border: 1px solid rgba(201, 168, 76, 0.75);
+  background: rgba(201, 168, 76, 0.12);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.pattern-hotspot-debug-marker__label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  background: rgba(8, 10, 8, 0.84);
+  color: rgba(201, 168, 76, 0.95);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* 器物切换：底部箭头 + 快选标签 */
 .pattern-vessel-switcher {
   position: absolute;
@@ -1674,7 +1856,7 @@ body {
   opacity: 1;
 }
 
-/* 辅助浮层（交互时显示） */
+/* 辅助浮层（交互时显示；纹样探秘提示默认隐藏，?hint=1 可开启） */
 .interaction-hint {
   position: absolute;
   top: 12px;
@@ -1689,6 +1871,14 @@ body {
   letter-spacing: 0.08em;
   z-index: 8;
   white-space: nowrap;
+}
+
+[data-section='pattern'] .interaction-hint:not(.interaction-hint--force-show) {
+  display: none;
+}
+
+[data-section='pattern'] .gesture-status:not(.gesture-status--force-show) {
+  display: none;
 }
 
 .gesture-status {
@@ -1862,8 +2052,9 @@ body {
   }
 }
 
-/* ── 性能诊断角标（dev 或 ?perf=1） ── */
+/* ── 性能诊断角标（?perf=1 或 localStorage perf=1 时启用） ── */
 #perf-hud {
+  display: none;
   position: absolute;
   top: 10px;
   right: 10px;
@@ -1879,6 +2070,10 @@ body {
   color: rgba(111, 148, 120, 0.9);
   min-width: 148px;
   backdrop-filter: blur(4px);
+}
+
+#perf-hud.perf-hud--visible {
+  display: block;
 }
 
 .perf-hud-row {

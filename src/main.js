@@ -1,5 +1,6 @@
 import './style.css';
 import { performanceMonitor } from './debug/PerformanceMonitor.js';
+import { stopMainLoop } from './core/FrameLoop.js';
 import { UIController } from './ui/UIController.js';
 import { AppRouter } from './core/AppRouter.js';
 import { HomeSection } from './sections/HomeSection.js';
@@ -72,6 +73,7 @@ class App {
 
   destroy() {
     window.removeEventListener('hashchange', this._onHashChange);
+    stopMainLoop();
     const section = this.router?.currentSection;
     if (section && this.router.sections[section]) {
       this.router.sections[section].onLeave?.();

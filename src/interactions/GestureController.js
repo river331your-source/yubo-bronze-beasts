@@ -5,8 +5,8 @@ import { createHandLandmarker } from './mediapipeVision.js';
 /** 指尖→掌心距离归一化后：低于此为"弯"，高于此为"伸" */
 const FINGER_CURLED = 0.4;
 
-/** MediaPipe 检测降频：每 N 帧跑一次 detectForVideo */
-const MEDIAPIPE_DETECT_INTERVAL = 2;
+/** MediaPipe 检测降频：每 N 帧跑一次 detectForVideo（1 = 每帧检测） */
+const MEDIAPIPE_DETECT_INTERVAL = 1;
 const FINGER_EXTENDED = 0.56;
 
 /** 拍手判定：掌心距阈值 + 合拢速度 + 冷却（防连击） */

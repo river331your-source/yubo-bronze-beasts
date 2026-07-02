@@ -23,7 +23,7 @@ class PerformanceMonitor {
     const params = new URLSearchParams(location.search);
     this.enabled =
       options.enabled ??
-      (import.meta.env.DEV || params.has('perf') || localStorage.getItem('perf') === '1');
+      (params.has('perf') || localStorage.getItem('perf') === '1');
     if (!this.enabled) return;
 
     this.clearLoops();
@@ -106,6 +106,7 @@ class PerformanceMonitor {
   _createHud() {
     const el = document.createElement('div');
     el.id = 'perf-hud';
+    el.className = 'perf-hud--visible';
     el.setAttribute('aria-hidden', 'true');
     el.innerHTML = `
       <div class="perf-hud-row perf-hud-fps">FPS —</div>
