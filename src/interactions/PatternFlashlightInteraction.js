@@ -7,7 +7,7 @@ const SHENSHOU_VESSEL_ID = 'shenshou';
 
 const SHENSHOU_ROW_TOPS = [12, 28, 44, 60, 76, 90];
 const SHENSHOU_CONTOUR_X = 78;
-const SHENSHOU_LABEL_X = 80;
+const SHENSHOU_LABEL_X = 86;
 
 function _shenshouLinePoints(annotation, rowTop) {
   const ax = annotation.ax * 100;
@@ -22,12 +22,12 @@ function _shenshouLinePoints(annotation, rowTop) {
 }
 
 const SHENSHOU_ANNOTATIONS = [
-  { id: 'longshou', ax: 0.68, ay: 0.15, label: '龙首' },
-  { id: 'shidi', ax: 0.6, ay: 0.33, label: '柿蒂形花' },
-  { id: 'hushen', ax: 0.72, ay: 0.48, label: '虎身' },
-  { id: 'fengniao', ax: 0.82, ay: 0.6, label: '凤鸟纹' },
-  { id: 'wowen', ax: 0.8, ay: 0.72, label: '涡纹' },
-  { id: 'guizu', ax: 0.7, ay: 0.9, label: '龟足' },
+  { id: 'longshou', ax: 0.635, ay: 0.26, label: '龙首' },
+  { id: 'shidi', ax: 0.62, ay: 0.36, label: '柿蒂形花' },
+  { id: 'hushen', ax: 0.60, ay: 0.56, label: '虎身' },
+  { id: 'fengniao', ax: 0.70, ay: 0.60, label: '凤鸟纹' },
+  { id: 'wowen', ax: 0.71, ay: 0.75, label: '涡纹' },
+  { id: 'guizu', ax: 0.66, ay: 0.90, label: '龟足' },
 ];
 
 const XIAOZUN_HOTSPOTS = [
@@ -69,6 +69,9 @@ export class PatternFlashlightInteraction {
     this._annotationTagEl = null;
     this._annotationTextEl = null;
     this._hotspotDebugLayerEl = null;
+    this._shenshouDebugMarkerEls = new Map();
+    this._shenshouDebugExportBtn = null;
+    this._shenshouDragState = null;
     this._shenshouAnnotationsEl = null;
     this._shenshouItemEls = [];
     this._shenshouLineEls = [];
@@ -76,11 +79,11 @@ export class PatternFlashlightInteraction {
     this._shenshouLabelEls = [];
 
     this._onMouseMove = (e) => {
-      if (!this.active) return;
+      if (!this.active || this._shenshouDragState) return;
       this._setTorchFromClient(e.clientX, e.clientY);
     };
     this._onTouchMove = (e) => {
-      if (!this.active || e.touches.length === 0) return;
+      if (!this.active || this._shenshouDragState || e.touches.length === 0) return;
       const t = e.touches[0];
       this._setTorchFromClient(t.clientX, t.clientY);
     };
@@ -165,6 +168,162 @@ export class PatternFlashlightInteraction {
     this._updateHotspotHit(x, y);
   }
 
+  /** 将视口 client 坐标转为 goldLayer 归一化 ax/ay */
+  _clientToGoldNorm(clientX, clientY) {
+    const rect = this.goldLayer?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    return {
+      ax: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      ay: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+    };
+  }
+
+  /** goldLayer 归一化坐标 → 舞台百分比（用于 DOM / SVG 定位） */
+  _goldNormToStagePercent(ax, ay) {
+    const goldRect = this.goldLayer?.getBoundingClientRect();
+    const stageRect = this.stageEl?.getBoundingClientRect();
+    if (!goldRect || !stageRect || !goldRect.width || !stageRect.width) {
+      return { x: ax * 100, y: ay * 100 };
+    }
+    const absX = goldRect.left + ax * goldRect.width;
+    const absY = goldRect.top + ay * goldRect.height;
+    return {
+      x: ((absX - stageRect.left) / stageRect.width) * 100,
+      y: ((absY - stageRect.top) / stageRect.height) * 100,
+    };
+  }
+
+  _formatShenshouDebugLabel(annotation) {
+    return `${annotation.id}  ax:${annotation.ax.toFixed(3)} ay:${annotation.ay.toFixed(3)}`;
+  }
+
+  _updateShenshouAnchorVisual(annotationId) {
+    const index = SHENSHOU_ANNOTATIONS.findIndex((item) => item.id === annotationId);
+    if (index < 0) return;
+
+    const annotation = SHENSHOU_ANNOTATIONS[index];
+    const rowTop = SHENSHOU_ROW_TOPS[index];
+    const stagePos = this._goldNormToStagePercent(annotation.ax, annotation.ay);
+    const stageAnnotation = {
+      ax: stagePos.x / 100,
+      ay: stagePos.y / 100,
+    };
+
+    const endpoint = this._shenshouEndpointEls.find((item) => item.id === annotationId);
+    if (endpoint) {
+      endpoint.el.style.left = `${stagePos.x}%`;
+      endpoint.el.style.top = `${stagePos.y}%`;
+    }
+
+    const line = this._shenshouLineEls.find((item) => item.id === annotationId);
+    if (line) {
+      line.pathEl.setAttribute('points', _shenshouLinePoints(stageAnnotation, rowTop));
+    }
+
+    const markerEl = this._shenshouDebugMarkerEls.get(annotationId);
+    if (markerEl) {
+      markerEl.style.left = `${stagePos.x}%`;
+      markerEl.style.top = `${stagePos.y}%`;
+      const labelEl = markerEl.querySelector('.pattern-hotspot-debug-marker__label');
+      if (labelEl) {
+        labelEl.textContent = this._formatShenshouDebugLabel(annotation);
+      }
+    }
+  }
+
+  _applyShenshouDrag(clientX, clientY, annotationId) {
+    const norm = this._clientToGoldNorm(clientX, clientY);
+    if (!norm) return;
+
+    const annotation = SHENSHOU_ANNOTATIONS.find((item) => item.id === annotationId);
+    if (!annotation) return;
+
+    annotation.ax = norm.ax;
+    annotation.ay = norm.ay;
+    this._updateShenshouAnchorVisual(annotationId);
+  }
+
+  _onShenshouMarkerPointerDown = (e) => {
+    if (!this._showHotspotDebug || this._currentVesselId !== SHENSHOU_VESSEL_ID) return;
+
+    const markerEl = e.currentTarget;
+    const annotationId = markerEl.dataset.id;
+    if (!annotationId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    markerEl.setPointerCapture(e.pointerId);
+    this._shenshouDragState = { id: annotationId, pointerId: e.pointerId };
+    markerEl.classList.add('dragging');
+  };
+
+  _onShenshouMarkerPointerMove = (e) => {
+    if (!this._shenshouDragState || e.pointerId !== this._shenshouDragState.pointerId) return;
+    if (e.currentTarget.dataset.id !== this._shenshouDragState.id) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    this._applyShenshouDrag(e.clientX, e.clientY, this._shenshouDragState.id);
+  };
+
+  _onShenshouMarkerPointerUp = (e) => {
+    if (!this._shenshouDragState || e.pointerId !== this._shenshouDragState.pointerId) return;
+
+    const markerEl = e.currentTarget;
+    markerEl.releasePointerCapture(e.pointerId);
+    markerEl.classList.remove('dragging');
+    this._shenshouDragState = null;
+  };
+
+  _teardownShenshouDebugDrag() {
+    this._shenshouDragState = null;
+    this._shenshouDebugMarkerEls.clear();
+    this._shenshouDebugExportBtn = null;
+    this._hotspotDebugLayerEl?.classList.remove('pattern-hotspot-debug-overlay--shenshou');
+  }
+
+  _renderShenshouDebugLayer(annotations) {
+    if (!this._hotspotDebugLayerEl) return;
+
+    this._shenshouDebugMarkerEls.clear();
+
+    for (const annotation of annotations) {
+      const stagePos = this._goldNormToStagePercent(annotation.ax, annotation.ay);
+      const markerEl = document.createElement('div');
+      markerEl.className = 'pattern-hotspot-debug-marker pattern-hotspot-debug-marker--draggable';
+      markerEl.dataset.id = annotation.id;
+      markerEl.style.left = `${stagePos.x}%`;
+      markerEl.style.top = `${stagePos.y}%`;
+      markerEl.style.width = `${0.09 * 200}%`;
+      markerEl.style.height = `${0.09 * 200}%`;
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'pattern-hotspot-debug-marker__label';
+      nameEl.textContent = this._formatShenshouDebugLabel(annotation);
+
+      markerEl.appendChild(nameEl);
+      markerEl.addEventListener('pointerdown', this._onShenshouMarkerPointerDown);
+      markerEl.addEventListener('pointermove', this._onShenshouMarkerPointerMove);
+      markerEl.addEventListener('pointerup', this._onShenshouMarkerPointerUp);
+      markerEl.addEventListener('pointercancel', this._onShenshouMarkerPointerUp);
+
+      this._hotspotDebugLayerEl.appendChild(markerEl);
+      this._shenshouDebugMarkerEls.set(annotation.id, markerEl);
+    }
+
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'pattern-hotspot-debug-export-btn';
+    exportBtn.textContent = 'P 导出坐标';
+    exportBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.exportShenshouAnnotations();
+    });
+    this._hotspotDebugLayerEl.appendChild(exportBtn);
+    this._shenshouDebugExportBtn = exportBtn;
+  }
+
   /** 将视口 client 坐标转为金色图层局部坐标 */
   _clientToGoldLocal(clientX, clientY) {
     const rect = this.goldLayer?.getBoundingClientRect();
@@ -211,8 +370,23 @@ export class PatternFlashlightInteraction {
 
   toggleHotspotDebug() {
     this._showHotspotDebug = !this._showHotspotDebug;
+    if (!this._showHotspotDebug) {
+      this._teardownShenshouDebugDrag();
+    }
     this._renderHotspotDebugLayer();
     return this._showHotspotDebug;
+  }
+
+  /** 神兽 H 调试：导出当前六个锚点坐标到 console（按 P 或点按钮） */
+  exportShenshouAnnotations() {
+    if (!this._showHotspotDebug || this._currentVesselId !== SHENSHOU_VESSEL_ID) return;
+
+    const lines = SHENSHOU_ANNOTATIONS.map(
+      (annotation) =>
+        `  { id: '${annotation.id}', ax: ${annotation.ax.toFixed(3)}, ay: ${annotation.ay.toFixed(3)}, label: '${annotation.label}' },`,
+    );
+    const output = `const SHENSHOU_ANNOTATIONS = [\n${lines.join('\n')}\n];`;
+    console.log('%c[神兽锚点导出]', 'color:#E8CB6A;font-weight:bold', '\n' + output);
   }
 
   _getActiveHotspots() {
@@ -445,25 +619,34 @@ export class PatternFlashlightInteraction {
   _renderHotspotDebugLayer() {
     if (!this._hotspotDebugLayerEl) return;
 
-    const xiaozunHotspots = this._getActiveHotspots();
+    this._teardownShenshouDebugDrag();
+    this._hotspotDebugLayerEl.innerHTML = '';
+
+    const isShenshou = this._currentVesselId === SHENSHOU_VESSEL_ID;
     const shenshouAnnotations = this._getShenshouAnnotations();
-    const debugMarkers = this._currentVesselId === SHENSHOU_VESSEL_ID
-      ? shenshouAnnotations.map((annotation) => ({
-          id: annotation.id,
-          x: annotation.ax,
-          y: annotation.ay,
-          r: 0.09,
-        }))
-      : xiaozunHotspots.map((hotspot) => ({
-          id: hotspot.id,
-          x: hotspot.x,
-          y: hotspot.y,
-          r: hotspot.r,
-        }));
+    const xiaozunHotspots = this._getActiveHotspots();
+
+    if (isShenshou) {
+      const shouldShow = this._showHotspotDebug && shenshouAnnotations.length > 0;
+      this._hotspotDebugLayerEl.hidden = !shouldShow;
+      if (!shouldShow) return;
+
+      this._hotspotDebugLayerEl.classList.add('pattern-hotspot-debug-overlay--shenshou');
+      this._renderShenshouDebugLayer(shenshouAnnotations);
+      return;
+    }
+
+    this._hotspotDebugLayerEl.classList.remove('pattern-hotspot-debug-overlay--shenshou');
+
+    const debugMarkers = xiaozunHotspots.map((hotspot) => ({
+      id: hotspot.id,
+      x: hotspot.x,
+      y: hotspot.y,
+      r: hotspot.r,
+    }));
 
     const shouldShow = this._showHotspotDebug && debugMarkers.length > 0;
     this._hotspotDebugLayerEl.hidden = !shouldShow;
-    this._hotspotDebugLayerEl.innerHTML = '';
     if (!shouldShow) return;
 
     for (const marker of debugMarkers) {
@@ -485,6 +668,7 @@ export class PatternFlashlightInteraction {
 
   dispose() {
     this.deactivate();
+    this._teardownShenshouDebugDrag();
     this.stageEl.removeEventListener('mousemove', this._onMouseMove);
     this.stageEl.removeEventListener('touchmove', this._onTouchMove);
     this.stageEl.removeEventListener('mouseleave', this._onPointerLeave);

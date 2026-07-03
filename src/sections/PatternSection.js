@@ -205,6 +205,8 @@ export class PatternSection {
         this.switchPatternVessel(this.vesselIndex + 1);
       } else if (e.key === 'h' || e.key === 'H') {
         this.flashlight?.toggleHotspotDebug?.();
+      } else if (e.key === 'p' || e.key === 'P') {
+        this.flashlight?.exportShenshouAnnotations?.();
       } else {
         const n = parseInt(e.key, 10);
         if (n >= 1 && n <= PATTERN_VESSELS.length) {
