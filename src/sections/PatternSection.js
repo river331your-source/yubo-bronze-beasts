@@ -91,8 +91,12 @@ export class PatternSection {
     this.vesselIndex = ((index % PATTERN_VESSELS.length) + PATTERN_VESSELS.length) % PATTERN_VESSELS.length;
     const vessel = getPatternVessel(this.vesselIndex);
 
-    this.flashlight?.setVessel(vessel);
-    this._updateVesselSwitcherUI(vessel);
+    // 无论 setVessel 是否因调试层抛错中断，切换器 UI 必须与 vesselIndex 同步
+    try {
+      this.flashlight?.setVessel(vessel);
+    } finally {
+      this._updateVesselSwitcherUI(vessel);
+    }
   }
 
   /** 按器物 id 切换（供下一步热区 / 档案卡联动） */

@@ -146,7 +146,12 @@ export class PatternFlashlightInteraction {
     this._setCurrentHotspot(null);
     this._setCurrentShenshouAnnotation(null);
     this._updateVesselAnnotationMode();
-    this._renderHotspotDebugLayer();
+    // H 调试层失败不得中断器物切换（否则 id 已变、UI 未更新 → 再点早退卡死）
+    try {
+      this._renderHotspotDebugLayer();
+    } catch (err) {
+      console.warn('[PatternFlashlight] hotspot debug render failed:', err);
+    }
   }
 
   getCurrentVesselId() {
@@ -270,14 +275,20 @@ export class PatternFlashlightInteraction {
     if (!this._shenshouDragState || e.pointerId !== this._shenshouDragState.pointerId) return;
 
     const markerEl = e.currentTarget;
-    markerEl.releasePointerCapture(e.pointerId);
+    try {
+      if (markerEl.hasPointerCapture?.(e.pointerId)) {
+        markerEl.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* 捕获已失效时 releasePointerCapture 会抛 InvalidStateError */
+    }
     markerEl.classList.remove('dragging');
     this._shenshouDragState = null;
   };
 
   _teardownShenshouDebugDrag() {
     this._shenshouDragState = null;
-    this._shenshouDebugMarkerEls.clear();
+    this._shenshouDebugMarkerEls?.clear?.();
     this._shenshouDebugExportBtn = null;
     this._hotspotDebugLayerEl?.classList.remove('pattern-hotspot-debug-overlay--shenshou');
   }
@@ -618,6 +629,9 @@ export class PatternFlashlightInteraction {
 
   _renderHotspotDebugLayer() {
     if (!this._hotspotDebugLayerEl) return;
+    if (!(this._shenshouDebugMarkerEls instanceof Map)) {
+      this._shenshouDebugMarkerEls = new Map();
+    }
 
     this._teardownShenshouDebugDrag();
     this._hotspotDebugLayerEl.innerHTML = '';
