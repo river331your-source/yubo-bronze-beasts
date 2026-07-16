@@ -475,15 +475,13 @@ export class PatternFlashlightInteraction {
   }
 
   _updateVesselAnnotationMode() {
-    const isXiaozun = this._currentVesselId === XIAOZUN_VESSEL_ID;
-    const isShenshou = this._currentVesselId === SHENSHOU_VESSEL_ID;
-
+    // 纹样介绍浮层（引线 + 【标签】文案）整层关闭，保留手电筒高亮与底部器物切换
     if (this._annotationEl) {
-      this._annotationEl.hidden = !isXiaozun;
-      if (!isXiaozun) this._annotationEl.classList.remove('on');
+      this._annotationEl.hidden = true;
+      this._annotationEl.classList.remove('on');
     }
     if (this._shenshouAnnotationsEl) {
-      this._shenshouAnnotationsEl.hidden = !isShenshou;
+      this._shenshouAnnotationsEl.hidden = true;
     }
   }
 
@@ -522,26 +520,10 @@ export class PatternFlashlightInteraction {
   }
 
   _updateAnnotation() {
-    if (!this._annotationEl || !this._annotationDotEl || !this._annotationLineEl || !this._annotationLabelEl) return;
-    if (!this._curHotspot) {
-      this._annotationEl.classList.remove('on');
-      return;
-    }
-
-    const hotspot = this._curHotspot;
-    this._annotationEl.classList.toggle('is-left', hotspot.side === 'left');
-    this._annotationEl.classList.toggle('is-right', hotspot.side !== 'left');
-    this._annotationEl.style.left = `${hotspot.x * 100}%`;
-    this._annotationEl.style.top = `${hotspot.y * 100}%`;
-    this._annotationTagEl.textContent = `【${hotspot.label}】`;
-    this._annotationTextEl.textContent = hotspot.text ?? '';
-
-    // 先移除后重加，保证切换热区时始终有“引线画出”效果
+    // 介绍纹样 UI 已关闭，不再展开引线/文案
+    if (!this._annotationEl) return;
+    this._annotationEl.hidden = true;
     this._annotationEl.classList.remove('on');
-    window.requestAnimationFrame(() => {
-      if (this._curHotspot?.id !== hotspot.id || !this._annotationEl) return;
-      this._annotationEl.classList.add('on');
-    });
   }
 
   _createShenshouAnnotations() {

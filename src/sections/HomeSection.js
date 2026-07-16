@@ -1,55 +1,74 @@
+import '../styles/bronze-door-gate.css';
 import { bindHomeImageFallbacks } from '../ui/homeImageFallback.js';
-import { BronzeGateTransition } from '../ui/BronzeGateTransition.js';
+import { BronzeDoorGate } from '../interactions/BronzeDoorGate.js';
 
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
- * onEnter: 绑定进入按钮、播放入场动画
- * onLeave: 解绑按钮（无 WebGL / 摄像头）
+ *
+ * 开门时序（避免闪首页 / 蓄满后假死）：
+ *   点按钮 → 挂门 → 立刻在门后预加载 atlas
+ *   → 用户长按蓄力（与加载并行）
+ *   → 蓄满后只等预加载收尾 → 推门 → onComplete 移除门层
  */
 export class HomeSection {
-  constructor({ enterBtn, onRequestAtlas, getAtlasSection }) {
+  constructor({ enterBtn }) {
     this.enterBtn = enterBtn;
-    this.onRequestAtlas = onRequestAtlas;
-    this.getAtlasSection = getAtlasSection;
+    this.router = null;
     this.root = document.getElementById('section-home');
-    this.viewport = document.getElementById('viewport-16-9');
     this.active = false;
-    this._transitioning = false;
+    this.gate = null;
+    this._gateTransitioning = false;
+    this._atlasReadyPromise = null;
     this._onEnterClick = () => this._handleEnterClick();
     bindHomeImageFallbacks(this.root);
   }
 
-  /**
-   * 青铜开幕转场：关门视觉层 → 后台切图鉴(循环照常) → 金光 → 开门 → 兜底确认渲染
-   * 转场层纯 DOM 覆盖，不触碰 WebGL / RAF
-   */
-  async _handleEnterClick() {
-    if (this._transitioning || !this.onRequestAtlas) return;
-    this._transitioning = true;
-    this.enterBtn?.setAttribute('disabled', 'true');
+  _handleEnterClick() {
+    if (this.gate || this._gateTransitioning || !this.enterBtn) return;
 
-    const gate = new BronzeGateTransition();
-    const mountTarget = this.viewport || document.body;
-    gate.mount(mountTarget);
+    // 先于 switchSection，防止 onLeave 误毁门层
+    this._gateTransitioning = true;
 
+    this.gate = new BronzeDoorGate({
+      container: document.body,
+      mode: 'svg',
+      taotieSrc: '/images/taotie-gold.png',
+      chargeMs: 1800,
+      onOpen: async () => {
+        // 蓄力期间已在背后加载；此处通常瞬间完成
+        await this._atlasReadyPromise;
+        this.router.sections.atlas.ensureRendering?.();
+      },
+      onComplete: () => {
+        this.router.sections.atlas?.ensureRendering?.();
+        this._gateTransitioning = false;
+        this._atlasReadyPromise = null;
+        this.gate = null;
+      },
+    });
+    this.gate.mount();
+
+    // 门盖住视口后立刻切展厅并加载，与蓄力并行
+    this._atlasReadyPromise = this._prepareAtlasBehindGate();
+  }
+
+  async _prepareAtlasBehindGate() {
     try {
-      // 先切图鉴：门后启动渲染循环，转场层仅视觉遮挡
-      await this.onRequestAtlas();
-      const atlas = this.getAtlasSection?.();
-      await atlas?.whenReady?.();
-
-      await gate.play();
-    } finally {
-      gate.destroy();
-      this.getAtlasSection?.()?.ensureRendering?.();
-      this._transitioning = false;
-      this.enterBtn?.removeAttribute('disabled');
+      await this.router.switchSection('atlas');
+      await this.router.sections.atlas.whenReady();
+      this.router.sections.atlas.ensureRendering?.();
+    } catch (err) {
+      console.error('[HomeSection] atlas preload failed:', err);
     }
   }
 
   async onEnter() {
     if (this.active) return;
     this.active = true;
+    this._gateTransitioning = false;
+    this._atlasReadyPromise = null;
+    this.gate = null;
+    document.querySelectorAll('.bronze-gate').forEach((el) => el.remove());
     this.enterBtn?.addEventListener('click', this._onEnterClick);
     this._playEnterAnimation();
   }
@@ -58,6 +77,11 @@ export class HomeSection {
     if (!this.active) return;
     this.active = false;
     this.enterBtn?.removeEventListener('click', this._onEnterClick);
+    if (!this._gateTransitioning) {
+      this.gate?.destroy();
+      this.gate = null;
+      this._atlasReadyPromise = null;
+    }
   }
 
   _playEnterAnimation() {

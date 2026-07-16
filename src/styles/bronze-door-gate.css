@@ -1,0 +1,102 @@
+/* 青铜门蓄力转场 · 样式
+   豫博青铜神兽录 · 首页进入展厅
+   配合 BronzeDoorGate.js 使用，SVG 版与 PNG 版共用这一套 */
+
+.bronze-gate {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0a0d0a;
+  user-select: none;
+  z-index: 999;
+}
+
+.bronze-gate__stage {
+  position: absolute;
+  inset: 0;
+}
+
+.bronze-gate .gate-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 顶部提示 */
+.bronze-gate__hint {
+  position: absolute;
+  top: 8%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: 0.35em;
+  color: rgba(201, 168, 76, 0.5);
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.4s ease;
+}
+
+/* ---- PNG 皮肤：两扇门图 ---- */
+.bronze-gate img.gate-leaf {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 50%;
+  object-fit: cover;
+  z-index: 1;
+}
+.bronze-gate img.gate-leaf--l { left: 0;  object-position: right center; }
+.bronze-gate img.gate-leaf--r { right: 0; object-position: left center; }
+
+/* ---- 推开动画（SVG 与 PNG 共用） ----
+   重量感缓动：起步慢（推动几吨青铜）、中段加速、末尾稳住 */
+.bronze-gate .gate-leaf {
+  transition:
+    transform 1.9s cubic-bezier(0.42, 0, 0.2, 1),
+    filter    0.7s ease;
+  will-change: transform;
+}
+
+/* 蓄满瞬间：门板压暗成剪影（逆光的灵魂） */
+.bronze-gate.is-opening .gate-leaf {
+  filter: brightness(0.35);
+}
+
+/* 两扇向外推开 */
+.bronze-gate.is-opening .gate-leaf--l { transform: translateX(-102%); }
+.bronze-gate.is-opening .gate-leaf--r { transform: translateX(102%); }
+
+/* SVG 皮肤下的门板是 <g>，同样能吃 transform */
+.bronze-gate.is-opening g.gate-leaf--l { transform: translateX(-102%); }
+.bronze-gate.is-opening g.gate-leaf--r { transform: translateX(102%); }
+
+/* 蓄满等待展厅就绪时：兽面轻微呼吸，避免画面假死 */
+.bronze-gate.is-charged .gate-ui image {
+  animation: gate-taotie-breathe 0.9s ease-in-out infinite;
+}
+
+@keyframes gate-taotie-breathe {
+  0%, 100% { opacity: 0.88; }
+  50% { opacity: 1; }
+}
+
+/* 门开后整层淡出，露出展厅；开门过程中背景透明，缝里直接是展厅 */
+.bronze-gate.is-opening {
+  background: transparent;
+  transition: opacity 0.5s ease 1.7s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bronze-gate.is-opening .gate-ui image {
+  animation: none;
+}
+
+/* 无障碍：尊重减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .bronze-gate .gate-leaf { transition: none; }
+  .bronze-gate.is-opening { transition: opacity 0.3s ease; }
+}

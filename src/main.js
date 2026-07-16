@@ -13,14 +13,13 @@ const SECTION_IDS = ['home', 'atlas', 'pattern', 'craft', 'story'];
 class App {
   constructor() {
     this.ui = new UIController();
+    const homeSection = new HomeSection({
+      enterBtn: document.getElementById('enter-btn'),
+    });
     this.router = new AppRouter({
       ui: this.ui,
       sections: {
-        home: new HomeSection({
-          enterBtn: document.getElementById('enter-btn'),
-          onRequestAtlas: () => this.router.switchSection('atlas'),
-          getAtlasSection: () => this.router.sections.atlas,
-        }),
+        home: homeSection,
         atlas: new AtlasSection({
           canvas: document.getElementById('webgl-canvas'),
           videoEl: document.getElementById('camera-feed'),
@@ -44,6 +43,7 @@ class App {
         }),
       },
     });
+    homeSection.router = this.router;
   }
 
   async init() {
@@ -57,9 +57,11 @@ class App {
     this.ui.onArtifactSelect = (index) => this.router.loadArtifact(index);
     this.ui.onModeChange = (mode) => this.router.switchMode(mode);
 
-    const hashSection = location.hash.replace(/^#\/?/, '');
-    const initial = SECTION_IDS.includes(hashSection) ? hashSection : 'home';
-    await this.router.switchSection(initial);
+    // 每次刷新/冷启动一律从首页入场（青铜门仪式），不按 hash 直达展厅
+    if (location.hash) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    await this.router.switchSection('home');
 
     window.addEventListener('hashchange', this._onHashChange);
   }
