@@ -198,7 +198,57 @@
             </div>
 
             <div id="section-pattern" class="scene-stage scene-stage--pattern section-hidden">
-              <!-- 纹样探秘舞台：双层线稿 + 手电筒遮罩 -->
+              <!-- 纹样探秘：左侧器物切换（对齐形制溯源文物选择器） -->
+              <nav
+                id="pattern-side-switcher"
+                class="pattern-side-switcher"
+                aria-label="切换器物"
+              >
+                <button
+                  type="button"
+                  class="pattern-side-item active"
+                  data-vessel-id="fuhao-xiao-zun"
+                  aria-pressed="true"
+                >
+                  <span class="pattern-side-dot" aria-hidden="true"></span>
+                  <span class="pattern-side-body">
+                    <img
+                      class="pattern-side-silhouette"
+                      src="/images/relics/fuhao_xiaozun.png"
+                      alt=""
+                      decoding="async"
+                      draggable="false"
+                    />
+                    <span class="pattern-side-label">
+                      <span class="pattern-side-name">妇好鸮尊</span>
+                      <span class="pattern-side-era">商代晚期</span>
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="pattern-side-item"
+                  data-vessel-id="shenshou"
+                  aria-pressed="false"
+                >
+                  <span class="pattern-side-dot" aria-hidden="true"></span>
+                  <span class="pattern-side-body">
+                    <img
+                      class="pattern-side-silhouette"
+                      src="/images/relics/shenshou_qingtong.png"
+                      alt=""
+                      decoding="async"
+                      draggable="false"
+                    />
+                    <span class="pattern-side-label">
+                      <span class="pattern-side-name">青铜神兽</span>
+                      <span class="pattern-side-era">春秋晚期·楚</span>
+                    </span>
+                  </span>
+                </button>
+              </nav>
+
+              <!-- 纹样探秘舞台：双层线稿 + 捶拓 -->
               <div class="pattern-torch-stage" id="pattern-torch-stage">
                 <div class="pattern-torch-layers">
                   <div class="pattern-lineart-stack" style="--lineart-aspect: 24803 / 19928">
@@ -218,49 +268,6 @@
                   </div>
                 </div>
               </div>
-
-              <!-- 器物切换：鸮尊 / 神兽 -->
-              <nav class="pattern-vessel-switcher" id="pattern-vessel-switcher" aria-label="切换器物">
-                <button
-                  type="button"
-                  class="pattern-vessel-btn"
-                  id="pattern-vessel-prev"
-                  aria-label="上一件器物"
-                >
-                  <span aria-hidden="true">‹</span>
-                </button>
-                <div class="pattern-vessel-center">
-                  <p class="pattern-vessel-label" id="pattern-vessel-label">妇好鸮尊</p>
-                  <div class="pattern-vessel-tabs" role="tablist" aria-label="器物快选">
-                    <button
-                      type="button"
-                      class="pattern-vessel-tab active"
-                      data-vessel-id="fuhao-xiao-zun"
-                      role="tab"
-                      aria-selected="true"
-                    >
-                      鸮尊
-                    </button>
-                    <button
-                      type="button"
-                      class="pattern-vessel-tab"
-                      data-vessel-id="shenshou"
-                      role="tab"
-                      aria-selected="false"
-                    >
-                      神兽
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="pattern-vessel-btn"
-                  id="pattern-vessel-next"
-                  aria-label="下一件器物"
-                >
-                  <span aria-hidden="true">›</span>
-                </button>
-              </nav>
             </div>
 
             <div class="stage-overlays">

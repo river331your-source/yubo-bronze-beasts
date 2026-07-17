@@ -7,6 +7,7 @@ import { HomeSection } from './sections/HomeSection.js';
 import { AtlasSection } from './sections/AtlasSection.js';
 import { PatternSection } from './sections/PatternSection.js';
 import { PlaceholderSection } from './sections/PlaceholderSection.js';
+import { preloadTaotieGold } from './interactions/BronzeDoorGate.js';
 
 const SECTION_IDS = ['home', 'atlas', 'pattern', 'craft', 'story'];
 
@@ -27,7 +28,7 @@ class App {
         }),
         pattern: new PatternSection({
           torchStage: document.getElementById('pattern-torch-stage'),
-          vesselSwitcher: document.getElementById('pattern-vessel-switcher'),
+          sideSwitcher: document.getElementById('pattern-side-switcher'),
           videoEl: document.getElementById('camera-feed'),
           ui: this.ui,
         }),
@@ -53,6 +54,7 @@ class App {
     }
 
     performanceMonitor.init();
+    preloadTaotieGold();
     this.ui.onNavSelect = (id) => this.router.switchSection(id);
     this.ui.onArtifactSelect = (index) => this.router.loadArtifact(index);
     this.ui.onModeChange = (mode) => this.router.switchMode(mode);

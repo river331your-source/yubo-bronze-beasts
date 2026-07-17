@@ -21,6 +21,17 @@
  */
 
 const NS = 'http://www.w3.org/2000/svg';
+const DEFAULT_TAOTIE_SRC = '/images/taotie-gold.png';
+
+/** 首页/初始化时预载兽面，避免门首次 mount 时 SVG image 触发卡顿 */
+export function preloadTaotieGold(src = DEFAULT_TAOTIE_SRC) {
+  if (typeof window === 'undefined') return null;
+  if (!window.__taotiePreload) {
+    window.__taotiePreload = new Image();
+    window.__taotiePreload.src = src;
+  }
+  return window.__taotiePreload;
+}
 
 const GOLD = '#C9A84C';
 const GOLD_BRIGHT = '#E8CB6A';
@@ -56,24 +67,31 @@ export class BronzeDoorGate {
   constructor({
     container = document.body,
     doorLeft, doorRight,
-    taotieSrc = '/images/taotie-gold.png',
+    taotieSrc = DEFAULT_TAOTIE_SRC,
     chargeMs = 1800,
     onOpen,
   } = {}) {
     Object.assign(this, { container, doorLeft, doorRight, taotieSrc, chargeMs, onOpen });
     this.t = 0; this.holding = false; this.done = false; this.raf = null;
     this._destroyed = false;
+    this._hidden = false;
     this._lastLit = -1;
     this._lastGlowStep = -1;
     this._onLeafTransitionEnd = null;
     this._onDown = this._onDown.bind(this);
     this._onUp = this._onUp.bind(this);
     this._loop = this._loop.bind(this);
+
+    preloadTaotieGold(this.taotieSrc);
+    this._uiSvg = this._buildUi();
   }
 
-  mount() {
-    const preload = new Image();
-    preload.src = this.taotieSrc;
+  mount({ hidden = false } = {}) {
+    if (this.root?.isConnected) {
+      if (hidden) this._setHidden(true);
+      else this.reveal();
+      return;
+    }
 
     const usePng = !!(this.doorLeft && this.doorRight);
     this.root = document.createElement('div');
@@ -95,14 +113,26 @@ export class BronzeDoorGate {
     this.flash = this.root.querySelector('.gate-flash');
     this.seam.style.width = '12px';
 
-    this.root.appendChild(this._buildUi());
+    this.root.appendChild(this._uiSvg);
     this.container.appendChild(this.root);
     window.__bronzeGate = this;
 
     this.root.addEventListener('pointerdown', this._onDown);
     window.addEventListener('pointerup', this._onUp);
     this._paint();
+    this._setHidden(hidden);
     console.log('[Gate] mounted, knob=', this.knob);
+  }
+
+  reveal() {
+    this._setHidden(false);
+  }
+
+  _setHidden(hidden) {
+    this._hidden = hidden;
+    if (!this.root) return;
+    this.root.style.visibility = hidden ? 'hidden' : '';
+    this.root.style.pointerEvents = hidden ? 'none' : '';
   }
 
   /* ---------- 中央UI：固定 480×480，永不缩放 ---------- */

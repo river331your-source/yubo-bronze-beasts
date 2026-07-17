@@ -5,20 +5,21 @@ import {
 } from '../interactions/PatternFlashlightInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import {
+  bindRelicSilhouetteFallback,
+  resolvePublicAsset,
+} from '../ui/relicSilhouetteFallback.js';
+import {
   DEFAULT_PATTERN_VESSEL_INDEX,
   PATTERN_VESSELS,
   getPatternVessel,
 } from '../data/pattern-vessels.js';
 import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
 
-/** 纹样探秘：器物线稿手电筒 + 两件器物切换 */
+/** 纹样探秘：器物线稿捶拓 + 左侧器物切换 */
 export class PatternSection {
-  constructor({ torchStage, vesselSwitcher, videoEl, ui }) {
+  constructor({ torchStage, sideSwitcher, videoEl, ui }) {
     this.torchStage = torchStage;
-    this.vesselSwitcher = vesselSwitcher;
-    this.vesselPrevBtn = vesselSwitcher?.querySelector('#pattern-vessel-prev');
-    this.vesselNextBtn = vesselSwitcher?.querySelector('#pattern-vessel-next');
-    this.vesselLabel = vesselSwitcher?.querySelector('#pattern-vessel-label');
+    this.sideSwitcher = sideSwitcher;
     this.videoEl = videoEl;
     this.ui = ui;
 
@@ -28,15 +29,14 @@ export class PatternSection {
     this.gestureController = null;
     this.skeletonOverlay = null;
     this._onKeydown = null;
-    this._onVesselPrev = null;
-    this._onVesselNext = null;
+    this._onSideItemClick = null;
     this._patternFrameListener = () => this._onPatternFrame();
     this._patternDetectListener = () => this._onPatternDetect();
     this._gestureInitGen = 0;
     this._lineartPreloads = null;
   }
 
-  /** onEnter: 线稿舞台 + 捶拓 + 器物切换器 */
+  /** onEnter: 线稿舞台 + 捶拓 + 左侧器物切换器 */
   async onEnter() {
     if (this.active) return;
     this.active = true;
@@ -54,7 +54,7 @@ export class PatternSection {
     this.ui.syncArtifactStages();
 
     this._bindKeyboard();
-    this._bindVesselSwitcher();
+    this._bindSideSwitcher();
 
     stopMainLoop();
     startMainLoop('pattern', this._patternFrameListener, this._patternDetectListener);
@@ -74,7 +74,7 @@ export class PatternSection {
       this._onKeydown = null;
     }
 
-    this._unbindVesselSwitcher();
+    this._unbindSideSwitcher();
 
     this.flashlight?.dispose();
     this.flashlight = null;
@@ -90,22 +90,25 @@ export class PatternSection {
   }
 
   /**
-   * 器物切换：更新双层线稿与切换器文案（下一步在此 id 上接热区数据）
+   * 器物切换：更新双层线稿与左侧切换器高亮
    * @param {number} index
    */
   async switchPatternVessel(index) {
+    const prevIndex = this.vesselIndex;
     this.vesselIndex = ((index % PATTERN_VESSELS.length) + PATTERN_VESSELS.length) % PATTERN_VESSELS.length;
     const vessel = getPatternVessel(this.vesselIndex);
 
-    // 无论 setVessel 是否抛错中断，切换器 UI 必须与 vesselIndex 同步
     try {
       await this.flashlight?.setVessel(vessel);
-    } finally {
-      this._updateVesselSwitcherUI(vessel);
+      this._updateSideSwitcherUI(vessel);
+    } catch (err) {
+      this.vesselIndex = prevIndex;
+      this._updateSideSwitcherUI(getPatternVessel(prevIndex));
+      console.error('[PatternSection] 器物切换失败，已回滚 UI:', err);
     }
   }
 
-  /** 按器物 id 切换（供下一步热区 / 档案卡联动） */
+  /** 按器物 id 切换（供左侧切换器 / 档案卡联动） */
   switchPatternVesselById(id) {
     const index = PATTERN_VESSELS.findIndex((v) => v.id === id);
     if (index >= 0) this.switchPatternVessel(index);
@@ -128,37 +131,34 @@ export class PatternSection {
     this.flashlight?.setTorchPos(x, y);
   }
 
-  _updateVesselSwitcherUI(vessel) {
-    if (this.vesselLabel) {
-      this.vesselLabel.textContent = vessel.name;
-    }
-    this.vesselSwitcher?.querySelectorAll('[data-vessel-id]').forEach((btn) => {
+  _updateSideSwitcherUI(vessel) {
+    this.sideSwitcher?.querySelectorAll('[data-vessel-id]').forEach((btn) => {
       const active = btn.dataset.vesselId === vessel.id;
       btn.classList.toggle('active', active);
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   }
 
-  _bindVesselSwitcher() {
-    this._onVesselPrev = () => this.switchPatternVessel(this.vesselIndex - 1);
-    this._onVesselNext = () => this.switchPatternVessel(this.vesselIndex + 1);
-    this._onVesselTabClick = (e) => {
-      const tab = e.target.closest('[data-vessel-id]');
-      if (tab) this.switchPatternVesselById(tab.dataset.vesselId);
+  _bindSideSwitcher() {
+    this.sideSwitcher?.querySelectorAll('.pattern-side-silhouette').forEach((img) => {
+      const item = img.closest('[data-vessel-id]');
+      const vesselId = item?.dataset?.vesselId;
+      const vessel = PATTERN_VESSELS.find((v) => v.id === vesselId);
+      const src = resolvePublicAsset(vessel?.thumbnail ?? img.getAttribute('src') ?? '');
+      bindRelicSilhouetteFallback(img, { id: vesselId, src });
+    });
+
+    this._onSideItemClick = (e) => {
+      const item = e.target.closest('[data-vessel-id]');
+      if (item) this.switchPatternVesselById(item.dataset.vesselId);
     };
 
-    this.vesselPrevBtn?.addEventListener('click', this._onVesselPrev);
-    this.vesselNextBtn?.addEventListener('click', this._onVesselNext);
-    this.vesselSwitcher?.addEventListener('click', this._onVesselTabClick);
+    this.sideSwitcher?.addEventListener('click', this._onSideItemClick);
   }
 
-  _unbindVesselSwitcher() {
-    this.vesselPrevBtn?.removeEventListener('click', this._onVesselPrev);
-    this.vesselNextBtn?.removeEventListener('click', this._onVesselNext);
-    this.vesselSwitcher?.removeEventListener('click', this._onVesselTabClick);
-    this._onVesselPrev = null;
-    this._onVesselNext = null;
-    this._onVesselTabClick = null;
+  _unbindSideSwitcher() {
+    this.sideSwitcher?.removeEventListener('click', this._onSideItemClick);
+    this._onSideItemClick = null;
   }
 
   _initGestureAsync() {
