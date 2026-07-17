@@ -133,7 +133,7 @@ export class DeconstructInteraction {
         }
 
         const canSlide =
-          stages.deconstruct >= 0.45 && stages.mode !== 'fist';
+          stages.mode === 'fist' || stages.deconstruct >= 0.45;
 
         if (canSlide) {
           const palmX = gestureController.getPalmCenterX?.();

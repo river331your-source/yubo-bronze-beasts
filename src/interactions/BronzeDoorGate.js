@@ -1,221 +1,160 @@
 /**
- * 青铜门蓄力转场 · BronzeDoorGate v2
+ * 青铜门蓄力转场 · BronzeDoorGate v3
  * 豫博青铜神兽录 · 首页进入展厅
  *
- * v2 更新：
- *   - 中央兽面改用真实纹样图 taotie-gold.png（替代手绘SVG）
- *   - 门板压到近黑，统一主页 #0a0d0a 调性
- *   - 门板加暗兽面浮雕肌理 + 暗角
- *   - 全屏覆盖层（配合 CSS 的 fixed / inset:0 / z-index:999）
- *
- * 两套皮肤：
- *   mode:'svg' → 纯色门板（零素材，现在能用）
- *   mode:'png' → 青铜材质门图（传 doorLeft/doorRight，UI层不变）
+ * v3 根治了 v2 的缩放变形问题：
+ *   门板 = CSS div（随屏自由铺满，纯色 + CSS 门钉纹理，不会变形）
+ *   中央UI = 固定 480×480 的 SVG，永远居中、永不缩放
+ *   两者彻底分离 —— 无论屏幕多大，云雷纹和兽面尺寸恒定
  *
  * 用法：
  *   import { BronzeDoorGate } from './BronzeDoorGate.js';
  *   const gate = new BronzeDoorGate({
- *     container: document.body,
- *     mode: 'svg',
  *     taotieSrc: '/images/taotie-gold.png',
  *     chargeMs: 1800,
- *     onOpen: async () => { await router.switchSection('atlas'); await atlas.whenReady(); },
- *     onComplete: () => { gate = null; },
+ *     onOpen: () => router.switchSection('atlas'),   // 只切版块；门会自己销毁
  *   });
  *   gate.mount();
+ *
+ * PNG 材质门（可选）：
+ *   new BronzeDoorGate({ doorLeft:'/images/door-left.png', doorRight:'/images/door-right.png', ... })
  */
 
 const NS = 'http://www.w3.org/2000/svg';
 
-const PALETTE = {
-  bg: '#0a0d0a',
-  doorL: '#12170f',
-  doorR: '#0d120b',
-  relief: '#2b3626',
-  seamDark: '#040603',
-  studShadow: '#040603',
-  studBase: '#1c2418',
-  studMid: '#242e1e',
-  studHi: '#3a4730',
-  patternOff: '#4a6152',
-  patternOn: '#E8CB6A',
-  gold: '#C9A84C',
-  goldBright: '#E8CB6A',
-  goldHi: '#FFF3C4',
-  knobBg: '#080b07',
-};
+const GOLD = '#C9A84C';
+const GOLD_BRIGHT = '#E8CB6A';
+const GOLD_HI = '#FFF3C4';
+const PAT_OFF = '#3f5347';
 
-const W = 680, H = 400, CX = 340, CY = 200;
-const RING_R = 70, RING_C = 2 * Math.PI * RING_R;
-const PET_N = 16, PET_R = 118;
-const TAOTIE_SIZE = 104;
-
-const STUDS = [
-  [70, 55], [150, 55], [230, 55], [450, 55], [530, 55], [610, 55],
-  [70, 200], [610, 200],
-  [70, 345], [150, 345], [230, 345], [450, 345], [530, 345], [610, 345],
-];
-
-const RELIEF = [
-  'M110 110 q40 -32 80 -4 q18 14 22 38', 'M570 110 q-40 -32 -80 -4 q-18 14 -22 38',
-  'M88 208 h42 v-15 h-21 v-13 h21 v-15 h-42 z', 'M592 208 h-42 v-15 h21 v-13 h-21 v-15 h42 z',
-  'M88 264 h42 v15 h-21 v13 h21 v15 h-42 z', 'M592 264 h-42 v15 h21 v13 h-21 v15 h42 z',
-  'M140 296 q30 22 60 6 q15 -9 19 -28', 'M540 296 q-30 22 -60 6 q-15 -9 -19 -28',
-  'M200 56 h32 v13 h-17 v11 h17 v13 h-32 z', 'M480 56 h-32 v13 h17 v11 h-17 v13 h32 z',
-  'M200 344 h32 v-13 h-17 v-11 h17 v-13 h-32 z', 'M480 344 h-32 v-13 h17 v-11 h-17 v-13 h32 z',
-];
+// 中央UI画布：固定尺寸，永不缩放
+const S = 480, C = S / 2;
+const RING_R = 96, RING_C = 2 * Math.PI * RING_R;
+const PET_N = 24, PET_R = 150;      // 24组云雷纹，更密
+const TAOTIE = 132;
 
 export class BronzeDoorGate {
   constructor({
-    container = document.body, mode = 'svg',
-    doorLeft, doorRight, taotieSrc = '/images/taotie-gold.png',
-    chargeMs = 1800, onOpen, onComplete,
+    container = document.body,
+    doorLeft, doorRight,
+    taotieSrc = '/images/taotie-gold.png',
+    chargeMs = 1800,
+    onOpen,
   } = {}) {
-    Object.assign(this, { container, mode, doorLeft, doorRight, taotieSrc, chargeMs, onOpen, onComplete });
+    Object.assign(this, { container, doorLeft, doorRight, taotieSrc, chargeMs, onOpen });
     this.t = 0; this.holding = false; this.done = false; this.raf = null;
-    this._lastLit = -1;
-    this._awaitPulseRaf = null;
+    this._destroyed = false;
+    this._onLeafTransitionEnd = null;
     this._onDown = this._onDown.bind(this);
     this._onUp = this._onUp.bind(this);
     this._loop = this._loop.bind(this);
   }
 
   mount() {
+    const usePng = !!(this.doorLeft && this.doorRight);
     this.root = document.createElement('div');
-    this.root.className = 'bronze-gate';
+    this.root.className = 'bronze-gate' + (usePng ? ' bronze-gate--png' : '');
     this.root.innerHTML =
-      '<div class="bronze-gate__hint">长 按 蓄 力</div>' +
-      '<div class="bronze-gate__stage"></div>';
-    this.stage = this.root.querySelector('.bronze-gate__stage');
-    this.hintEl = this.root.querySelector('.bronze-gate__hint');
+      '<div class="gate-leaf gate-leaf--l"' +
+        (usePng ? ' style="background-image:url(' + this.doorLeft + ')"' : '') + '></div>' +
+      '<div class="gate-leaf gate-leaf--r"' +
+        (usePng ? ' style="background-image:url(' + this.doorRight + ')"' : '') + '></div>' +
+      '<div class="gate-seam"></div>' +
+      '<div class="gate-vignette"></div>' +
+      '<div class="gate-hint">长 按 蓄 力</div>' +
+      '<div class="gate-flash"></div>';
 
-    this.mode === 'png' ? this._buildPngDoors() : this._buildSvgDoors();
-    this._buildUiLayer();
+    this.leafL = this.root.querySelector('.gate-leaf--l');
+    this.leafR = this.root.querySelector('.gate-leaf--r');
+    this.seam = this.root.querySelector('.gate-seam');
+    this.hintEl = this.root.querySelector('.gate-hint');
+    this.flash = this.root.querySelector('.gate-flash');
 
+    this.root.appendChild(this._buildUi());
     this.container.appendChild(this.root);
+
     this.knob.addEventListener('pointerdown', this._onDown);
     window.addEventListener('pointerup', this._onUp);
     this.knob.addEventListener('pointerleave', this._onUp);
     this._paint();
   }
 
-  /* ---------- 皮肤A：纯色SVG门板 ---------- */
-  _buildSvgDoors() {
-    const svg = this._svgRoot();
-    const g = this._el('g', { 'clip-path': 'url(#bg-clip)' });
-    // 底色挂在门板上，开门时随叶移走，缝里直接露出展厅
-    this.leafL = this._el('g', { class: 'gate-leaf gate-leaf--l' });
-    this.leafR = this._el('g', { class: 'gate-leaf gate-leaf--r' });
-    this.leafL.appendChild(this._el('rect', { x: 0, y: 0, width: CX, height: H, fill: PALETTE.doorL }));
-    this.leafR.appendChild(this._el('rect', { x: CX, y: 0, width: CX, height: H, fill: PALETTE.doorR }));
-
-    RELIEF.forEach((d, i) => {
-      const leaf = (i % 2 === 0) ? this.leafL : this.leafR;
-      leaf.appendChild(this._el('path', {
-        d, stroke: PALETTE.relief, fill: 'none', 'stroke-width': 2.4, opacity: 0.85,
-      }));
-    });
-    [[166, 170, this.leafL], [514, 170, this.leafR]].forEach(([x, y, leaf]) => {
-      [19, 7].forEach((r) => leaf.appendChild(this._el('circle', {
-        cx: x, cy: y, r, stroke: PALETTE.relief, fill: 'none', 'stroke-width': 2.4, opacity: 0.85,
-      })));
+  /* ---------- 中央UI：固定 480×480，永不缩放 ---------- */
+  _buildUi() {
+    const svg = this._el('svg', {
+      class: 'gate-ui',
+      viewBox: '0 0 ' + S + ' ' + S,
+      width: S, height: S,          // 固定像素，不随屏幕变
+      xmlns: NS,
     });
 
-    STUDS.forEach(([x, y]) => {
-      const leaf = x < CX ? this.leafL : this.leafR;
-      leaf.appendChild(this._el('circle', { cx: x + 1.5, cy: y + 2, r: 11, fill: PALETTE.studShadow, opacity: 0.7 }));
-      leaf.appendChild(this._el('circle', { cx: x, cy: y, r: 11, fill: PALETTE.studBase }));
-      leaf.appendChild(this._el('circle', { cx: x - 0.8, cy: y - 1.2, r: 8.4, fill: PALETTE.studMid }));
-      leaf.appendChild(this._el('circle', { cx: x - 3, cy: y - 3.4, r: 3.2, fill: PALETTE.studHi, opacity: 0.7 }));
-    });
-
-    this.leafL.appendChild(this._el('rect', { x: CX - 14, y: 0, width: 14, height: H, fill: PALETTE.seamDark, opacity: 0.75 }));
-    this.leafR.appendChild(this._el('rect', { x: CX, y: 0, width: 12, height: H, fill: PALETTE.seamDark, opacity: 0.5 }));
-
-    g.appendChild(this.leafL);
-    g.appendChild(this.leafR);
-    svg.appendChild(g);
-    this.svg = svg;
-    this.stage.appendChild(svg);
-  }
-
-  /* ---------- 皮肤B：PNG材质门板 ---------- */
-  _buildPngDoors() {
-    this.stage.insertAdjacentHTML('afterbegin',
-      '<img class="gate-leaf gate-leaf--l" src="' + this.doorLeft + '" alt="">' +
-      '<img class="gate-leaf gate-leaf--r" src="' + this.doorRight + '" alt="">');
-    this.leafL = this.stage.querySelector('.gate-leaf--l');
-    this.leafR = this.stage.querySelector('.gate-leaf--r');
-    this.svg = this._svgRoot();
-    this.stage.appendChild(this.svg);
-  }
-
-  /* ---------- UI层：门缝光 + 云雷纹 + 衔环 + 兽面PNG ---------- */
-  _buildUiLayer() {
-    const ui = this._el('g', { class: 'gate-ui' });
-
-    this.seam = this._el('rect', { x: CX - 3, y: 0, width: 6, height: H, fill: 'url(#gate-seam)', opacity: 0.22 });
-    ui.appendChild(this.seam);
-
+    // 云雷纹一圈（24组，密而规整）
     this.pets = [];
-    const petsG = this._el('g', { fill: 'none', 'stroke-linecap': 'square', 'stroke-linejoin': 'miter' });
+    const ring = this._el('g');
     for (let i = 0; i < PET_N; i++) {
       const a = (i / PET_N) * Math.PI * 2 - Math.PI / 2;
-      const x = CX + Math.cos(a) * PET_R, y = CY + Math.sin(a) * PET_R;
-      const g = this._el('g', { opacity: 0.1, transform: 'rotate(' + (i / PET_N) * 360 + ' ' + x + ' ' + y + ')' });
+      const x = C + Math.cos(a) * PET_R;
+      const y = C + Math.sin(a) * PET_R;
+      const g = this._el('g', {
+        opacity: 0.14,
+        transform: 'rotate(' + ((i / PET_N) * 360 + 90) + ' ' + x + ' ' + y + ')',
+      });
+      // 单元回字纹：小而工整
       const p = this._el('path', {
-        d: 'M' + (x - 14) + ' ' + (y - 8) + ' h9 v4 h-4 v4 h8 v-12 h4 v16 h-17 z M' + (x + 4) + ' ' + (y - 8) + ' h10 v16 h-4 v-12 h-3 v8 h-3 z',
-        stroke: PALETTE.patternOff, 'stroke-width': 2, fill: 'none',
+        d: 'M' + (x - 9) + ' ' + (y - 6) + ' h6 v3 h-3 v3 h6 v-9 h3 v12 h-12 z',
+        stroke: PAT_OFF, 'stroke-width': 1.4, fill: 'none',
+        'stroke-linecap': 'square', 'stroke-linejoin': 'miter',
       });
       g.appendChild(p);
-      petsG.appendChild(g);
+      ring.appendChild(g);
       this.pets.push({ g, p });
     }
-    ui.appendChild(petsG);
+    svg.appendChild(ring);
 
-    ui.appendChild(this._el('circle', { cx: CX, cy: CY, r: 96, fill: 'none', stroke: PALETTE.gold, 'stroke-width': 0.8, opacity: 0.14 }));
-    ui.appendChild(this._el('circle', { cx: CX, cy: CY, r: RING_R, fill: PALETTE.knobBg, opacity: 0.95 }));
-    ui.appendChild(this._el('circle', { cx: CX, cy: CY, r: RING_R, fill: 'none', stroke: PALETTE.gold, 'stroke-width': 4.5, opacity: 0.16 }));
+    // 外细圈
+    svg.appendChild(this._el('circle', {
+      cx: C, cy: C, r: 128, fill: 'none', stroke: GOLD, 'stroke-width': 0.7, opacity: 0.13,
+    }));
 
+    // 衔环底盘
+    svg.appendChild(this._el('circle', { cx: C, cy: C, r: RING_R, fill: '#080b07', opacity: 0.9 }));
+    svg.appendChild(this._el('circle', {
+      cx: C, cy: C, r: RING_R, fill: 'none', stroke: GOLD, 'stroke-width': 5, opacity: 0.18,
+    }));
+
+    // 蓄力环
     this.prog = this._el('circle', {
-      cx: CX, cy: CY, r: RING_R, fill: 'none', stroke: PALETTE.goldBright,
-      'stroke-width': 4.5, 'stroke-linecap': 'round',
-      'stroke-dasharray': RING_C.toFixed(1), 'stroke-dashoffset': RING_C.toFixed(1),
-      transform: 'rotate(-90 ' + CX + ' ' + CY + ')',
+      cx: C, cy: C, r: RING_R, fill: 'none', stroke: GOLD_BRIGHT,
+      'stroke-width': 5, 'stroke-linecap': 'round',
+      'stroke-dasharray': RING_C.toFixed(1),
+      'stroke-dashoffset': RING_C.toFixed(1),
+      transform: 'rotate(-90 ' + C + ' ' + C + ')',
     });
-    ui.appendChild(this.prog);
-    ui.appendChild(this._el('circle', { cx: CX, cy: CY, r: 58, fill: 'none', stroke: PALETTE.gold, 'stroke-width': 0.8, 'stroke-dasharray': '2 5', opacity: 0.3 }));
+    svg.appendChild(this.prog);
 
-    // 中央兽面：真实纹样图（不拦截点击）
+    // 内虚线圈
+    svg.appendChild(this._el('circle', {
+      cx: C, cy: C, r: 80, fill: 'none', stroke: GOLD,
+      'stroke-width': 0.7, 'stroke-dasharray': '2 5', opacity: 0.3,
+    }));
+
+    // 中央兽面（真实纹样图）
     this.taotie = this._el('image', {
-      x: CX - TAOTIE_SIZE / 2, y: CY - TAOTIE_SIZE / 2,
-      width: TAOTIE_SIZE, height: TAOTIE_SIZE,
-      opacity: 0.62, 'pointer-events': 'none',
+      x: C - TAOTIE / 2, y: C - TAOTIE / 2,
+      width: TAOTIE, height: TAOTIE,
+      opacity: 0.6, style: 'pointer-events:none',
     });
     this.taotie.setAttribute('href', this.taotieSrc);
     this.taotie.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', this.taotieSrc);
-    ui.appendChild(this.taotie);
+    svg.appendChild(this.taotie);
 
-    // 暗角 / 爆光条必须 pointer-events:none，否则会盖住兽面中轴导致点不准
-    ui.appendChild(this._el('rect', {
-      x: 0, y: 0, width: W, height: H, fill: 'url(#gate-vig)', 'pointer-events': 'none',
-    }));
-
-    this.flash = this._el('rect', {
-      x: CX - 10, y: 0, width: 20, height: H,
-      fill: PALETTE.goldHi, opacity: 0, 'pointer-events': 'none',
-    });
-    ui.appendChild(this.flash);
-
-    // knob 放在最上层，确保点兽面正中即可蓄力
+    // 命中层（最上）
     this.knob = this._el('circle', {
-      cx: CX, cy: CY, r: RING_R, fill: 'transparent',
-      style: 'cursor:pointer', 'pointer-events': 'all',
+      cx: C, cy: C, r: RING_R, fill: 'transparent', style: 'cursor:pointer',
     });
-    ui.appendChild(this.knob);
+    svg.appendChild(this.knob);
 
-    this.svg.appendChild(ui);
-    this.uiLayer = ui;
+    return svg;
   }
 
   /* ---------- 交互 ---------- */
@@ -233,8 +172,7 @@ export class BronzeDoorGate {
 
   _loop() {
     const up = 16.7 / this.chargeMs;
-    const down = up * 3;
-    this.t = this.holding ? Math.min(1, this.t + up) : Math.max(0, this.t - down);
+    this.t = this.holding ? Math.min(1, this.t + up) : Math.max(0, this.t - up * 3);
     this._paint();
     if (this.t >= 1 && !this.done) { this.done = true; this._open(); }
     this.raf = (this.t > 0 || this.holding) ? requestAnimationFrame(this._loop) : null;
@@ -242,117 +180,74 @@ export class BronzeDoorGate {
 
   _paint() {
     const t = this.t;
+
     this.prog.setAttribute('stroke-dashoffset', (RING_C * (1 - t)).toFixed(1));
-    this.prog.setAttribute('stroke', t >= 1 ? PALETTE.goldHi : PALETTE.goldBright);
+    this.prog.setAttribute('stroke', t >= 1 ? GOLD_HI : GOLD_BRIGHT);
 
+    // 云雷纹逐组点亮
     const lit = Math.floor(t * PET_N + 0.001);
-    if (lit !== this._lastLit) {
-      this._lastLit = lit;
-      this.pets.forEach(function (o, i) {
-        const on = i < lit;
-        o.g.setAttribute('opacity', on ? 0.95 : 0.1);
-        o.p.setAttribute('stroke', on ? PALETTE.patternOn : PALETTE.patternOff);
-      });
-    }
+    this.pets.forEach(function (o, i) {
+      const on = i < lit;
+      o.g.setAttribute('opacity', on ? 0.95 : 0.14);
+      o.p.setAttribute('stroke', on ? GOLD_BRIGHT : PAT_OFF);
+    });
 
-    const w = 6 + t * 11;
-    this.seam.setAttribute('opacity', 0.22 + t * 0.78);
-    this.seam.setAttribute('width', w);
-    this.seam.setAttribute('x', CX - w / 2);
+    // 门缝光渐强变宽
+    this.seam.style.opacity = 0.2 + t * 0.8;
+    this.seam.style.width = (3 + t * 9) + 'px';
 
-    // 只用 opacity，避免每帧改 drop-shadow 造成卡顿
-    this.taotie.setAttribute('opacity', (0.62 + t * 0.38).toFixed(2));
+    // 兽面醒来
+    this.taotie.setAttribute('opacity', (0.6 + t * 0.4).toFixed(2));
+    this.taotie.style.filter =
+      'brightness(' + (0.85 + t * 0.55).toFixed(2) + ') ' +
+      'drop-shadow(0 0 ' + (t * 14).toFixed(1) + 'px rgba(232,203,106,' + (t * 0.9).toFixed(2) + '))';
   }
 
-  /* ---------- 蓄满：等门后展厅就绪 → 爆光推门（等待时保持微动，不假死） ---------- */
-  async _open() {
-    this.hintEl.style.opacity = '0';
-    if (this.knob) this.knob.style.pointerEvents = 'none';
-    this.root.classList.add('is-charged');
-    this._startAwaitPulse();
-
-    try {
-      await Promise.resolve(this.onOpen?.());
-    } catch (err) {
-      console.error('[BronzeDoorGate] onOpen failed:', err);
-    }
-
-    this._stopAwaitPulse();
-    this.root.style.background = 'transparent';
-
-    this.flash.setAttribute('opacity', '1');
-    let w = 20;
+  /* ---------- 蓄满：门后先切版块 → 爆光 → 推开 → 自毁 ---------- */
+  _open() {
     const self = this;
-    const grow = function () {
-      w += 24;
-      self.flash.setAttribute('width', w);
-      self.flash.setAttribute('x', CX - w / 2);
-      self.flash.setAttribute('opacity', Math.max(0, 1 - w / 620));
-      if (w < 640) requestAnimationFrame(grow);
+    this.hintEl.style.opacity = '0';
+
+    // 关键：门还关着时先切版块，推开后露出的直接是展厅
+    if (this.onOpen) this.onOpen();
+
+    this.root.classList.add('is-flash');
+    setTimeout(function () { self.root.classList.add('is-opening'); }, 90);
+
+    const leaf = this.leafR;
+    this._onLeafTransitionEnd = function onEnd(e) {
+      if (e && e.propertyName !== 'transform') return;
+      leaf.removeEventListener('transitionend', onEnd);
+      self._onLeafTransitionEnd = null;
+      self.destroy();
     };
-    requestAnimationFrame(grow);
-
-    this.uiLayer.style.transition = 'opacity .35s ease';
-    this.uiLayer.style.opacity = '0';
-    this.root.classList.add('is-opening');
-
-    setTimeout(() => {
-      this.onComplete?.();
-      this.destroy();
-    }, 2200);
-  }
-
-  _startAwaitPulse() {
-    this._stopAwaitPulse();
-    let phase = 0;
-    const tick = () => {
-      phase += 0.08;
-      const pulse = 0.5 + Math.sin(phase) * 0.5;
-      this.seam.setAttribute('opacity', (0.75 + pulse * 0.25).toFixed(2));
-      this.taotie.setAttribute('opacity', (0.85 + pulse * 0.15).toFixed(2));
-      this.prog.setAttribute('stroke', pulse > 0.5 ? PALETTE.goldHi : PALETTE.goldBright);
-      this._awaitPulseRaf = requestAnimationFrame(tick);
-    };
-    this._awaitPulseRaf = requestAnimationFrame(tick);
-  }
-
-  _stopAwaitPulse() {
-    if (this._awaitPulseRaf) {
-      cancelAnimationFrame(this._awaitPulseRaf);
-      this._awaitPulseRaf = null;
-    }
+    leaf.addEventListener('transitionend', this._onLeafTransitionEnd);
+    // 兜底：transitionend 未触发时仍清理
+    this._closeTimer = setTimeout(function () { self.destroy(); }, 3000);
   }
 
   destroy() {
-    this._stopAwaitPulse();
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = null;
-    if (this.knob) this.knob.removeEventListener('pointerdown', this._onDown);
-    window.removeEventListener('pointerup', this._onUp);
-    if (this.root) this.root.remove();
-  }
+    if (this._destroyed) return;
+    this._destroyed = true;
 
-  /* ---------- 工具 ---------- */
-  _svgRoot() {
-    const svg = this._el('svg', {
-      viewBox: '0 0 ' + W + ' ' + H,
-      preserveAspectRatio: 'xMidYMid slice',
-      class: 'gate-svg', xmlns: NS,
-    });
-    svg.innerHTML =
-      '<defs>' +
-      '<clipPath id="bg-clip"><rect x="0" y="0" width="' + W + '" height="' + H + '"/></clipPath>' +
-      '<linearGradient id="gate-seam" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0" stop-color="' + PALETTE.goldBright + '" stop-opacity="0"/>' +
-      '<stop offset=".5" stop-color="' + PALETTE.goldHi + '"/>' +
-      '<stop offset="1" stop-color="' + PALETTE.goldBright + '" stop-opacity="0"/>' +
-      '</linearGradient>' +
-      '<radialGradient id="gate-vig" cx="50%" cy="50%" r="62%">' +
-      '<stop offset="0" stop-color="#000" stop-opacity="0"/>' +
-      '<stop offset="1" stop-color="#000" stop-opacity=".72"/>' +
-      '</radialGradient>' +
-      '</defs>';
-    return svg;
+    if (this._closeTimer) { clearTimeout(this._closeTimer); this._closeTimer = null; }
+    if (this.leafR && this._onLeafTransitionEnd) {
+      this.leafR.removeEventListener('transitionend', this._onLeafTransitionEnd);
+      this._onLeafTransitionEnd = null;
+    }
+    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+    if (this.knob) {
+      this.knob.removeEventListener('pointerdown', this._onDown);
+      this.knob.removeEventListener('pointerleave', this._onUp);
+    }
+    window.removeEventListener('pointerup', this._onUp);
+
+    if (this.root) {
+      if (this.root.parentNode) this.root.parentNode.removeChild(this.root);
+      this.root = null;
+    }
+    // 强制清掉 body 上可能残留的 .bronze-gate（实例引用丢失时兜底）
+    document.body.querySelectorAll('.bronze-gate').forEach(function (el) { el.remove(); });
   }
 
   _el(tag, attrs) {

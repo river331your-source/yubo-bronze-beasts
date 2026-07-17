@@ -32,11 +32,14 @@ function createGlowTexture(size = 64) {
     const ctx = canvas.getContext('2d');
     const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
     g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.35, 'rgba(255,255,255,0.65)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.6)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
     const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
     tex.needsUpdate = true;
     return tex;
   }
@@ -481,8 +484,9 @@ export class PointCloudFromModel {
     this.glowMap = createGlowTexture(64);
     // AdditiveBlending + sizeAttenuation：密集处叠亮变实，边缘通透
     this.material = new THREE.PointsMaterial({
-      size: cfg.PARTICLE_SIZE ?? 0.038,
+      size: (cfg.PARTICLE_SIZE ?? 0.038) * 1.3,
       map: this.glowMap,
+      alphaTest: 0.01,
       transparent: true,
       opacity: 0.92,
       sizeAttenuation: true,

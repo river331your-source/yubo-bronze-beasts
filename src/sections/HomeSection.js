@@ -5,10 +5,9 @@ import { BronzeDoorGate } from '../interactions/BronzeDoorGate.js';
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
  *
- * 开门时序（避免闪首页 / 蓄满后假死）：
- *   点按钮 → 挂门 → 立刻在门后预加载 atlas
- *   → 用户长按蓄力（与加载并行）
- *   → 蓄满后只等预加载收尾 → 推门 → onComplete 移除门层
+ * 开门时序（v3）：
+ *   点按钮 → 挂门 → 立刻在门后预加载 atlas（与蓄力并行）
+ *   → 蓄满 → onOpen 确保渲染 → 推门 → 门自毁
  */
 export class HomeSection {
   constructor({ enterBtn }) {
@@ -29,24 +28,13 @@ export class HomeSection {
     // 先于 switchSection，防止 onLeave 误毁门层
     this._gateTransitioning = true;
 
-    this.gate = new BronzeDoorGate({
-      container: document.body,
-      mode: 'svg',
+    const gate = new BronzeDoorGate({
       taotieSrc: '/images/taotie-gold.png',
       chargeMs: 1800,
-      onOpen: async () => {
-        // 蓄力期间已在背后加载；此处通常瞬间完成
-        await this._atlasReadyPromise;
-        this.router.sections.atlas.ensureRendering?.();
-      },
-      onComplete: () => {
-        this.router.sections.atlas?.ensureRendering?.();
-        this._gateTransitioning = false;
-        this._atlasReadyPromise = null;
-        this.gate = null;
-      },
+      onOpen: () => this.router.sections.atlas?.ensureRendering?.(),
     });
-    this.gate.mount();
+    this.gate = gate;
+    gate.mount();
 
     // 门盖住视口后立刻切展厅并加载，与蓄力并行
     this._atlasReadyPromise = this._prepareAtlasBehindGate();
@@ -79,9 +67,11 @@ export class HomeSection {
     this.enterBtn?.removeEventListener('click', this._onEnterClick);
     if (!this._gateTransitioning) {
       this.gate?.destroy();
-      this.gate = null;
-      this._atlasReadyPromise = null;
     }
+    // 转场中门自毁，不在 onLeave 里提前清 DOM；只释放 HomeSection 侧引用
+    this.gate = null;
+    this._atlasReadyPromise = null;
+    this._gateTransitioning = false;
   }
 
   _playEnterAnimation() {
