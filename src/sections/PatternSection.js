@@ -93,13 +93,13 @@ export class PatternSection {
    * 器物切换：更新双层线稿与切换器文案（下一步在此 id 上接热区数据）
    * @param {number} index
    */
-  switchPatternVessel(index) {
+  async switchPatternVessel(index) {
     this.vesselIndex = ((index % PATTERN_VESSELS.length) + PATTERN_VESSELS.length) % PATTERN_VESSELS.length;
     const vessel = getPatternVessel(this.vesselIndex);
 
-    // 无论 setVessel 是否因调试层抛错中断，切换器 UI 必须与 vesselIndex 同步
+    // 无论 setVessel 是否抛错中断，切换器 UI 必须与 vesselIndex 同步
     try {
-      this.flashlight?.setVessel(vessel);
+      await this.flashlight?.setVessel(vessel);
     } finally {
       this._updateVesselSwitcherUI(vessel);
     }

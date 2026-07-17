@@ -6,8 +6,7 @@ const GOLD_FILTER =
   'sepia(1) saturate(4.8) hue-rotate(6deg) brightness(1.18)';
 
 const STAT_W = 88;
-const LIFT_THRESHOLD = 70;
-const LIFT_DURATION_MS = 1200;
+const LIFT_THRESHOLD = 40;
 const RICE_PAPER = '#efe6d0';
 
 /** 按 src 缓存染金线稿（一次性 filter，切换/缩放时直接 drawImage） */
@@ -74,11 +73,17 @@ export class PatternFlashlightInteraction {
     this._topHintEl = null;
     this._revealBtn = null;
     this._repaperBtn = null;
+    this._resetBtn = null;
+    this._exportBtn = null;
+    this._postLiftRow = null;
 
-    /** @type {'rubbing'|'lifting'|'lifted'} */
-    this._liftPhase = 'rubbing';
+    this._lifted = false;
     this._liftT = 0;
-    this._liftAnimStart = 0;
+    this._liftDone = false;
+    this.liftCacheCv = null;
+    this.liftCacheCtx = null;
+    this._liftCacheReady = false;
+    this._inkCv = null;
 
     if (this.goldLayer) {
       this.goldLayer.setAttribute('aria-hidden', 'true');
@@ -91,7 +96,7 @@ export class PatternFlashlightInteraction {
     this._createOffscreenCanvases();
 
     this._onPointerDown = (e) => {
-      if (!this.active || e.button !== 0 || this._gestureRubbing || this._liftPhase !== 'rubbing') return;
+      if (!this.active || e.button !== 0 || this._gestureRubbing || this._lifted) return;
       if (e.target.closest('button')) return;
       this._drawing = true;
       this._tapFromClient(e.clientX, e.clientY);
@@ -106,8 +111,8 @@ export class PatternFlashlightInteraction {
       this._computeProgress();
     };
 
-    this.rubCanvasEl.addEventListener('pointerdown', this._onPointerDown);
-    this.rubCanvasEl.addEventListener('pointermove', this._onPointerMove);
+    this.rubCanvasEl?.addEventListener('pointerdown', this._onPointerDown);
+    this.rubCanvasEl?.addEventListener('pointermove', this._onPointerMove);
     window.addEventListener('pointerup', this._onPointerUp);
     window.addEventListener('pointercancel', this._onPointerUp);
 
@@ -124,8 +129,13 @@ export class PatternFlashlightInteraction {
 
   activate() {
     this.active = true;
+    if (this.stageEl) this.stageEl.style.zIndex = '5';
     const vessel = this.getVessel();
-    if (vessel) this.setVessel(vessel);
+    if (vessel) {
+      this.setVessel(vessel).catch((err) => {
+        console.error('[PatternFlashlightInteraction] activate setVessel:', err);
+      });
+    }
     this._startLoop();
   }
 
@@ -140,34 +150,45 @@ export class PatternFlashlightInteraction {
    * 器物切换：暗底 / 素材层同步换线稿 PNG，清空捶拓遮罩
    * @param {{ id: string, name: string, lineartSrc: string, aspectRatio?: string }} vessel
    */
-  setVessel(vessel) {
+  async setVessel(vessel) {
     if (!vessel?.lineartSrc) return;
     if (this._currentVesselId === vessel.id) return;
 
-    this._currentVesselId = vessel.id;
-    this._currentVesselName = vessel.name;
-    const src = vessel.lineartSrc;
+    const prevId = this._currentVesselId;
+    const prevName = this._currentVesselName;
 
-    if (this.lineartStack && vessel.aspectRatio) {
-      this.lineartStack.style.setProperty('--lineart-aspect', vessel.aspectRatio);
+    try {
+      const src = vessel.lineartSrc;
+
+      this._resetVesselSwitchState();
+
+      if (vessel.aspectRatio) {
+        this.lineartStack?.style?.setProperty('--lineart-aspect', vessel.aspectRatio);
+      }
+
+      if (this.dimLayer) {
+        this.dimLayer.src = src;
+        this.dimLayer.alt = `${vessel.name}线稿`;
+      }
+      if (this.goldLayer) {
+        this.goldLayer.src = src;
+      }
+
+      this.lineartStack?.classList?.add('pattern-lineart-stack--switching');
+      window.setTimeout(() => {
+        this.lineartStack?.classList?.remove('pattern-lineart-stack--switching');
+      }, 220);
+
+      await this._reloadLineart({ strict: true });
+
+      this._currentVesselId = vessel.id;
+      this._currentVesselName = vessel.name;
+    } catch (err) {
+      console.error('[setVessel] 切换失败，回滚:', err);
+      this._currentVesselId = prevId;
+      this._currentVesselName = prevName;
+      throw err;
     }
-
-    this._resetLiftState();
-
-    if (this.dimLayer) {
-      this.dimLayer.src = src;
-      this.dimLayer.alt = `${vessel.name}线稿`;
-    }
-    if (this.goldLayer) {
-      this.goldLayer.src = src;
-    }
-
-    this.lineartStack?.classList.add('pattern-lineart-stack--switching');
-    window.setTimeout(() => {
-      this.lineartStack?.classList.remove('pattern-lineart-stack--switching');
-    }, 220);
-
-    this._reloadLineart();
   }
 
   getCurrentVesselId() {
@@ -184,7 +205,7 @@ export class PatternFlashlightInteraction {
   }
 
   update(gestureController) {
-    if (!this.active || this._liftPhase !== 'rubbing' || !this._gestureRubbing || !gestureController) return;
+    if (!this.active || this._lifted || !this._gestureRubbing || !gestureController) return;
 
     const screenPos = gestureController.getIndexFingerScreenPos();
     if (!screenPos) return;
@@ -226,8 +247,10 @@ export class PatternFlashlightInteraction {
     this._topHintEl = null;
     this._revealBtn?.remove();
     this._revealBtn = null;
-    this._repaperBtn?.remove();
+    this._postLiftRow?.remove();
+    this._postLiftRow = null;
     this._repaperBtn = null;
+    this._exportBtn = null;
 
     this.maskCv = null;
     this.maskCtx = null;
@@ -238,6 +261,9 @@ export class PatternFlashlightInteraction {
     this.statsCv = null;
     this.statsCtx = null;
     this._goldCache = null;
+    this.liftCacheCv = null;
+    this.liftCacheCtx = null;
+    this._liftCacheReady = false;
   }
 
   /* ---------- canvas 基础设施 ---------- */
@@ -346,11 +372,11 @@ export class PatternFlashlightInteraction {
       position: 'absolute',
       left: '50%',
       transform: 'translateX(-50%)',
-      zIndex: '7',
+      zIndex: '20',
       padding: '8px 22px',
       borderRadius: '999px',
-      border: '1px solid rgba(201, 168, 76, 0.55)',
-      background: 'rgba(7, 10, 8, 0.88)',
+      border: '1px solid rgba(201, 168, 76, 0.5)',
+      background: 'rgba(8, 10, 8, 0.85)',
       color: 'rgba(201, 168, 76, 0.92)',
       fontSize: '12px',
       letterSpacing: '0.35em',
@@ -371,25 +397,74 @@ export class PatternFlashlightInteraction {
       this._startLift();
     });
 
+    this._postLiftRow = document.createElement('div');
+    Object.assign(this._postLiftRow.style, {
+      position: 'absolute',
+      left: '50%',
+      bottom: '11%',
+      transform: 'translateX(-50%)',
+      zIndex: '20',
+      display: 'flex',
+      gap: '10px',
+      alignItems: 'center',
+      opacity: '0',
+      pointerEvents: 'none',
+      transition: 'opacity 0.4s ease',
+    });
+
+    const rowBtn = {
+      padding: baseBtn.padding,
+      borderRadius: baseBtn.borderRadius,
+      border: baseBtn.border,
+      background: baseBtn.background,
+      color: baseBtn.color,
+      fontSize: baseBtn.fontSize,
+      letterSpacing: baseBtn.letterSpacing,
+      cursor: baseBtn.cursor,
+      boxShadow: baseBtn.boxShadow,
+      transition: baseBtn.transition,
+      position: 'relative',
+      left: 'auto',
+      bottom: 'auto',
+      transform: 'none',
+      zIndex: '20',
+      opacity: '1',
+      pointerEvents: 'auto',
+    };
+
     this._repaperBtn = document.createElement('button');
     this._repaperBtn.type = 'button';
     this._repaperBtn.className = 'pattern-rub-repaper-btn';
     this._repaperBtn.textContent = '重新铺纸';
-    Object.assign(this._repaperBtn.style, baseBtn, { bottom: '11%', letterSpacing: '0.22em' });
+    Object.assign(this._repaperBtn.style, rowBtn, { letterSpacing: '0.22em' });
     this._repaperBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this._repaper();
     });
+    this._resetBtn = this._repaperBtn;
+
+    this._exportBtn = document.createElement('button');
+    this._exportBtn.type = 'button';
+    this._exportBtn.className = 'pattern-rub-export-btn';
+    this._exportBtn.textContent = '带 走 拓 片';
+    Object.assign(this._exportBtn.style, rowBtn);
+    this._exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._exportRubbing();
+    });
+
+    this._postLiftRow.appendChild(this._repaperBtn);
+    this._postLiftRow.appendChild(this._exportBtn);
 
     this.stageEl.appendChild(this._revealBtn);
-    this.stageEl.appendChild(this._repaperBtn);
+    this.stageEl.appendChild(this._postLiftRow);
     this._updateActionButtons();
     this._updateTopHint();
   }
 
   _updateTopHint() {
     if (!this._topHintEl) return;
-    if (this._liftPhase === 'lifted') {
+    if (this._lifted && this._liftT >= 1) {
       this._topHintEl.textContent = `拓 片 已 成 · ${this._currentVesselName || ''}`;
       this._topHintEl.style.opacity = '1';
     } else {
@@ -399,60 +474,153 @@ export class PatternFlashlightInteraction {
   }
 
   _updateActionButtons() {
-    const showReveal =
-      this._liftPhase === 'rubbing' && this._progress >= LIFT_THRESHOLD;
-    const showRepaper = this._liftPhase === 'lifted';
+    console.log(
+      '[按钮] _lifted=',
+      this._lifted,
+      '_liftT=',
+      this._liftT,
+      '_progress=',
+      this._progress,
+      'revealBtn=',
+      this._revealBtn,
+      'exportBtn=',
+      this._exportBtn,
+      'resetBtn=',
+      this._resetBtn
+    );
+
+    const showReveal = !this._lifted && this._progress >= LIFT_THRESHOLD;
+    const showPostLift = this._lifted && this._liftT >= 1;
 
     if (this._revealBtn) {
       this._revealBtn.style.opacity = showReveal ? '1' : '0';
       this._revealBtn.style.pointerEvents = showReveal ? 'auto' : 'none';
     }
+    if (this._postLiftRow) {
+      this._postLiftRow.style.opacity = showPostLift ? '1' : '0';
+      this._postLiftRow.style.pointerEvents = showPostLift ? 'auto' : 'none';
+    }
     if (this._repaperBtn) {
-      this._repaperBtn.style.opacity = showRepaper ? '1' : '0';
-      this._repaperBtn.style.pointerEvents = showRepaper ? 'auto' : 'none';
+      this._repaperBtn.style.opacity = showPostLift ? '1' : '0';
+      this._repaperBtn.style.pointerEvents = showPostLift ? 'auto' : 'none';
+    }
+    if (this._exportBtn) {
+      this._exportBtn.style.opacity = showPostLift ? '1' : '0';
+      this._exportBtn.style.pointerEvents = showPostLift ? 'auto' : 'none';
     }
     if (this._progressEl) {
       this._progressEl.style.transition = 'opacity 0.4s ease';
-      this._progressEl.style.opacity = this._liftPhase === 'lifted' ? '0' : '1';
+      this._progressEl.style.opacity = showPostLift ? '0' : '1';
     }
   }
 
-  _resetLiftState() {
-    this._liftPhase = 'rubbing';
-    this._liftT = 0;
-    this._liftAnimStart = 0;
-    this._drawing = false;
+  _markLiftComplete() {
+    if (this._liftDone) return;
+    this._liftDone = true;
     this._updateTopHint();
     this._updateActionButtons();
   }
 
+  _exportRubbing() {
+    console.log('[导出] 触发, _inkCv=', this._inkCv);
+    if (!this._inkCv) {
+      console.warn('[导出] _inkCv为空');
+      return;
+    }
+
+    const W2 = this._w * 2;
+    const H2 = this._h * 2;
+    const ex = document.createElement('canvas');
+    ex.width = W2;
+    ex.height = H2;
+    const c = ex.getContext('2d');
+
+    c.fillStyle = '#efe6d0';
+    c.fillRect(0, 0, W2, H2);
+    c.drawImage(this._inkCv, 0, 0, W2, H2);
+
+    const name = this._currentVesselId === 'shenshou' ? '青铜神兽' : '妇好鸮尊';
+    c.fillStyle = 'rgba(43,35,24,0.7)';
+    c.textAlign = 'right';
+    c.font = `${Math.round(W2 * 0.016)}px "Noto Serif CJK SC", serif`;
+    c.fillText(`豫博青铜神兽录 · ${name} 拓片`, W2 * 0.95, H2 * 0.94);
+    c.font = `${Math.round(W2 * 0.011)}px "Noto Serif CJK SC", serif`;
+    c.fillText(`拓于 ${new Date().toLocaleDateString('zh-CN')}`, W2 * 0.95, H2 * 0.965);
+
+    ex.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `豫博青铜神兽录_${name}拓片.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  }
+
+  _invalidateLiftCache() {
+    this._liftCacheReady = false;
+    this._inkCv = null;
+  }
+
+  _resetLiftState() {
+    this._lifted = false;
+    this._liftT = 0;
+    this._liftDone = false;
+    this._drawing = false;
+    this._invalidateLiftCache();
+    this._updateTopHint();
+    this._updateActionButtons();
+  }
+
+  /** 器物切换：重置揭纸/进度/缓存与按钮，避免半态卡死 */
+  _resetVesselSwitchState() {
+    this._lifted = false;
+    this._liftT = 0;
+    this._liftDone = false;
+    this._drawing = false;
+    this._inkCv = null;
+    this._liftCacheReady = false;
+    this.liftCacheCv = null;
+    this.liftCacheCtx = null;
+    this._progress = 0;
+
+    this._revealBtn?.classList?.remove('on');
+    this._repaperBtn?.classList?.remove('on');
+    this._exportBtn?.classList?.remove('on');
+
+    this._updateProgressUI();
+    this._updateTopHint();
+    this._updateActionButtons();
+    this._dirty = true;
+  }
+
   _startLift() {
-    if (this._liftPhase !== 'rubbing' || this._progress < LIFT_THRESHOLD) return;
+    console.log('[揭纸] 点击了', '_lifted=', this._lifted, '_progress=', this._progress, 'LIFT_THRESHOLD=', LIFT_THRESHOLD);
+    console.log('[揭纸] rubCv有内容吗？', this.rubCv?.width, this.rubCv?.height, '_progress=', this._progress);
+    if (this._lifted) return;
+    if (!this._w || !this._h) this._syncCanvasSize();
     this._forceCompose();
+    this._ensureInkCv();
     this._dirty = false;
     this._drawing = false;
-    this._liftPhase = 'lifting';
-    this._liftAnimStart = performance.now();
+    this._lifted = true;
     this._liftT = 0;
+    this._liftDone = false;
+    this._liftCacheReady = false;
     this._updateActionButtons();
   }
 
   _repaper() {
     this._clearMask();
-    this._resetLiftState();
+    this._lifted = false;
+    this._liftT = 0;
+    this._liftDone = false;
+    this._invalidateLiftCache();
+    this._updateTopHint();
+    this._updateActionButtons();
     this._dirty = true;
-  }
-
-  _updateLiftAnim() {
-    if (this._liftPhase !== 'lifting') return;
-    const raw = Math.min(1, (performance.now() - this._liftAnimStart) / LIFT_DURATION_MS);
-    this._liftT = 1 - Math.pow(1 - raw, 3);
-    if (raw >= 1) {
-      this._liftPhase = 'lifted';
-      this._liftT = 1;
-      this._updateTopHint();
-      this._updateActionButtons();
-    }
   }
 
   _forceCompose() {
@@ -465,18 +633,21 @@ export class PatternFlashlightInteraction {
     this._dirty = false;
   }
 
-  async _reloadLineart() {
+  async _reloadLineart({ strict = false } = {}) {
     try {
       await Promise.all([
         this._waitImage(this.dimLayer),
         this._waitImage(this.goldLayer),
       ]);
-    } catch {
-      /* decode 失败时仍尝试按当前尺寸同步 */
+    } catch (err) {
+      if (strict) throw err;
     }
 
     this._currentLineartSrc = this.goldLayer?.src ?? null;
     this._goldCache = getOrBuildGoldCache(this._currentLineartSrc, this.goldLayer);
+    if (strict && !this._goldCache) {
+      throw new Error('gold lineart cache build failed');
+    }
 
     this._syncCanvasSize();
     this._clearMask();
@@ -523,6 +694,7 @@ export class PatternFlashlightInteraction {
     }
 
     this._paintArtLayer();
+    this._invalidateLiftCache();
     this._dirty = true;
   }
 
@@ -559,19 +731,19 @@ export class PatternFlashlightInteraction {
   }
 
   _tap(x, y) {
-    if (this._liftPhase !== 'rubbing' || !this.maskCtx || !this._w || !this._h) return;
+    if (this._lifted || !this.maskCtx || !this._w || !this._h) return;
 
-    const R = 30;
-    for (let i = 0; i < 26; i++) {
+    const R = 52;
+    for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
       const d = Math.pow(Math.random(), 0.62) * R;
       const px = x + Math.cos(a) * d;
       const py = y + Math.sin(a) * d;
       const fade = 1 - d / R;
       this.maskCtx.globalCompositeOperation = 'lighter';
-      this.maskCtx.fillStyle = `rgba(255,255,255,${(0.16 * fade).toFixed(3)})`;
+      this.maskCtx.fillStyle = `rgba(255,255,255,${(0.38 * fade).toFixed(3)})`;
       this.maskCtx.beginPath();
-      this.maskCtx.arc(px, py, Math.random() * 3.4 + 1.4, 0, Math.PI * 2);
+      this.maskCtx.arc(px, py, Math.random() * 5 + 2, 0, Math.PI * 2);
       this.maskCtx.fill();
     }
     this.maskCtx.globalCompositeOperation = 'source-over';
@@ -587,26 +759,25 @@ export class PatternFlashlightInteraction {
     const scaleY = this._statH / this._h;
     const sx = x * scaleX;
     const sy = y * scaleY;
-    const R = 30 * scaleX;
+    const R = 52 * scaleX;
 
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
       const d = Math.pow(Math.random(), 0.62) * R;
       const px = sx + Math.cos(a) * d;
       const py = sy + Math.sin(a) * d;
       const fade = 1 - d / R;
       this.statsCtx.globalCompositeOperation = 'lighter';
-      this.statsCtx.fillStyle = `rgba(255,255,255,${(0.16 * fade).toFixed(3)})`;
+      this.statsCtx.fillStyle = `rgba(255,255,255,${(0.38 * fade).toFixed(3)})`;
       this.statsCtx.beginPath();
-      this.statsCtx.arc(px, py, (Math.random() * 3.4 + 1.4) * scaleX, 0, Math.PI * 2);
+      this.statsCtx.arc(px, py, (Math.random() * 5 + 2) * scaleX, 0, Math.PI * 2);
       this.statsCtx.fill();
     }
     this.statsCtx.globalCompositeOperation = 'source-over';
   }
 
   _compose() {
-    if (this._liftPhase !== 'rubbing') return;
-    if (!this._dirty || !this.rubCtx || !this._w || !this._h) return;
+    if (this._lifted || !this._dirty || !this.rubCtx || !this._w || !this._h) return;
     this._dirty = false;
 
     this.rubCtx.clearRect(0, 0, this._w, this._h);
@@ -616,79 +787,142 @@ export class PatternFlashlightInteraction {
     this.rubCtx.globalCompositeOperation = 'source-over';
   }
 
-  _renderRubbing(ctx) {
-    if (this.dimLayer?.complete && this.dimLayer.naturalWidth) {
-      ctx.filter = 'brightness(0.3)';
-      ctx.drawImage(this.dimLayer, 0, 0, this._w, this._h);
-      ctx.filter = 'none';
-    }
-
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(this.rubCv, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
+  _easeLift(t) {
+    return 1 - Math.pow(1 - t, 3);
   }
 
-  _renderLift(ctx, liftT) {
-    if (liftT < 1 && this.dimLayer?.complete && this.dimLayer.naturalWidth) {
-      ctx.save();
-      ctx.globalAlpha = 1 - liftT;
-      ctx.filter = 'brightness(0.3)';
-      ctx.drawImage(this.dimLayer, 0, 0, this._w, this._h);
-      ctx.filter = 'none';
-      ctx.restore();
+  /** 揭纸用：把 rubCv 形状染成松烟墨（透明底，无 invert 白底） */
+  _ensureInkCv() {
+    const W = this._w;
+    const H = this._h;
+    if (!W || !H) return;
+
+    if (this._inkCv && (this._inkCv.width !== W || this._inkCv.height !== H)) {
+      this._inkCv = null;
     }
 
-    if (liftT > 0) {
-      const inset = 18 * (1 - liftT);
-      ctx.save();
-      ctx.globalAlpha = liftT;
-      ctx.fillStyle = RICE_PAPER;
-      ctx.fillRect(inset, inset, this._w - inset * 2, this._h - inset * 2);
-      ctx.restore();
+    if (!this._inkCv) {
+      this._inkCv = document.createElement('canvas');
+      this._inkCv.width = W;
+      this._inkCv.height = H;
+      const ic = this._inkCv.getContext('2d');
+      ic.drawImage(this.rubCv, 0, 0);
+      ic.globalCompositeOperation = 'source-in';
+      ic.fillStyle = '#2b2318';
+      ic.fillRect(0, 0, W, H);
+      ic.globalCompositeOperation = 'source-over';
+
+      const test = ic.getImageData(0, 0, Math.min(W, 50), Math.min(H, 50)).data;
+      let nonEmpty = 0;
+      for (let i = 3; i < test.length; i += 4) if (test[i] > 0) nonEmpty++;
+      console.log('[inkCv] 已生成', W, 'x', H, '样本非空像素:', nonEmpty, 'rubCv=', this.rubCv);
+    }
+  }
+
+  /** 揭纸绘制（liftT 0..1）；动画结束后 bake 到离屏缓存 */
+  _drawLiftFrame(ctx, liftT) {
+    console.log('[揭纸帧] liftT=', liftT, 'inkCv=', this._inkCv);
+    const W = this._w;
+    const H = this._h;
+    const e = this._easeLift(liftT);
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (liftT < 1 && this.dimLayer?.complete && this.dimLayer.naturalWidth) {
+      ctx.globalAlpha = 1 - liftT;
+      ctx.drawImage(this.dimLayer, 0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
 
     ctx.save();
-    ctx.translate(0, -liftT * 26);
+    if (liftT > 0) {
+      ctx.translate(0, -e * 26);
+      ctx.globalAlpha = e;
+      ctx.fillStyle = RICE_PAPER;
+      const pad = e * 20;
+      ctx.fillRect(46 - pad * 0.3, 30 - pad * 0.3, W - 92 + pad * 0.6, H - 92 + pad * 0.6);
+      ctx.globalAlpha = 1;
 
-    if (liftT < 1) {
-      ctx.save();
-      ctx.globalAlpha = 1 - liftT;
+      this._ensureInkCv();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(this._inkCv, 0, 0);
+    } else {
       ctx.globalCompositeOperation = 'lighter';
       ctx.drawImage(this.rubCv, 0, 0);
-      ctx.restore();
+    }
+    ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  _ensureLiftCache() {
+    if (!this.liftCacheCv) {
+      this.liftCacheCv = document.createElement('canvas');
+      this.liftCacheCtx = this.liftCacheCv.getContext('2d');
+    }
+    if (this.liftCacheCv.width !== this._w || this.liftCacheCv.height !== this._h) {
+      this.liftCacheCv.width = this._w;
+      this.liftCacheCv.height = this._h;
+      this._liftCacheReady = false;
+    }
+    if (!this._liftCacheReady) {
+      this._drawLiftFrame(this.liftCacheCtx, 1);
+      this._liftCacheReady = true;
+    }
+  }
+
+  _renderRubbing(ctx) {
+    if (this.dimLayer?.complete && this.dimLayer.naturalWidth) {
+      ctx.globalAlpha = 0.28;
+      ctx.drawImage(this.dimLayer, 0, 0, this._w, this._h);
+      ctx.globalAlpha = 1;
     }
 
-    ctx.globalAlpha = liftT;
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.filter = 'invert(1) sepia(.5) saturate(2)';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = 'rgba(232,203,106,0.9)';
+    ctx.shadowBlur = 14;
     ctx.drawImage(this.rubCv, 0, 0);
-    ctx.filter = 'none';
+    ctx.drawImage(this.rubCv, 0, 0);
+    ctx.shadowBlur = 0;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
 
   _render() {
+    if (Math.random() < 0.02) console.log('[render] _lifted=', this._lifted, '_liftT=', this._liftT, '_w=', this._w, '_h=', this._h);
     if (!this.displayCtx || !this._w || !this._h) return;
 
-    this._updateLiftAnim();
-    this._compose();
-
     const ctx = this.displayCtx;
-    ctx.clearRect(0, 0, this._w, this._h);
 
-    if (this._liftPhase === 'rubbing' && this._liftT === 0) {
+    if (!this._lifted) {
+      this._compose();
+      ctx.clearRect(0, 0, this._w, this._h);
       this._renderRubbing(ctx);
       return;
     }
 
-    const liftT = this._liftPhase === 'lifted' ? 1 : this._liftT;
-    this._renderLift(ctx, liftT);
+    if (this._liftT < 1) {
+      this._liftT = Math.min(1, this._liftT + 0.018);
+      ctx.clearRect(0, 0, this._w, this._h);
+      this._drawLiftFrame(ctx, this._liftT);
+      if (this._liftT >= 1) {
+        this._ensureLiftCache();
+        this._markLiftComplete();
+      }
+      return;
+    }
+
+    if (!this._liftDone) {
+      this._ensureLiftCache();
+      this._markLiftComplete();
+    }
+
+    this._ensureLiftCache();
+    ctx.clearRect(0, 0, this._w, this._h);
+    ctx.drawImage(this.liftCacheCv, 0, 0);
   }
 
   _computeProgress() {
-    if (this._liftPhase !== 'rubbing') return;
-    if (!this.statsCtx || !this._statW || !this._statH) return;
+    if (this._lifted || !this.statsCtx || !this._statW || !this._statH) return;
 
     const data = this.statsCtx.getImageData(0, 0, this._statW, this._statH).data;
     let sampled = 0;
