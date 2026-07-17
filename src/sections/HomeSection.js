@@ -1,6 +1,6 @@
 import '../styles/bronze-door-gate.css';
 import { bindHomeImageFallbacks } from '../ui/homeImageFallback.js';
-import { BronzeDoorGate } from '../interactions/BronzeDoorGate.js';
+import { BronzeDoorGate, purgeStaleBronzeGates } from '../interactions/BronzeDoorGate.js';
 
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
@@ -56,7 +56,7 @@ export class HomeSection {
     this._gateTransitioning = false;
     this._atlasReadyPromise = null;
     this.gate = null;
-    document.querySelectorAll('.bronze-gate').forEach((el) => el.remove());
+    purgeStaleBronzeGates();
     this.enterBtn?.addEventListener('click', this._onEnterClick);
     this._playEnterAnimation();
   }

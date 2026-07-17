@@ -1,5 +1,8 @@
 import { GestureController } from '../interactions/GestureController.js';
-import { PatternFlashlightInteraction } from '../interactions/PatternFlashlightInteraction.js';
+import {
+  PatternFlashlightInteraction,
+  warmGoldLineartCache,
+} from '../interactions/PatternFlashlightInteraction.js';
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import {
   DEFAULT_PATTERN_VESSEL_INDEX,
@@ -30,12 +33,15 @@ export class PatternSection {
     this._patternFrameListener = () => this._onPatternFrame();
     this._patternDetectListener = () => this._onPatternDetect();
     this._gestureInitGen = 0;
+    this._lineartPreloads = null;
   }
 
-  /** onEnter: 线稿舞台 + 手电筒 + 器物切换器 */
+  /** onEnter: 线稿舞台 + 捶拓 + 器物切换器 */
   async onEnter() {
     if (this.active) return;
     this.active = true;
+
+    await this._preloadPatternLinearts();
 
     this.flashlight = new PatternFlashlightInteraction({
       stageEl: this.torchStage,
@@ -229,5 +235,30 @@ export class PatternSection {
 
   _onPatternDetect() {
     this.gestureController?.tickDetect();
+  }
+
+  /** 预载线稿 PNG 并预热染金离屏缓存 */
+  async _preloadPatternLinearts() {
+    if (this._lineartPreloads) return this._lineartPreloads;
+
+    this._lineartPreloads = Promise.all(
+      PATTERN_VESSELS.map(
+        (vessel) =>
+          new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+              warmGoldLineartCache(vessel.lineartSrc, img);
+              resolve();
+            };
+            img.onerror = () => reject(new Error(`lineart preload failed: ${vessel.lineartSrc}`));
+            img.src = vessel.lineartSrc;
+          })
+      )
+    ).catch((err) => {
+      this._lineartPreloads = null;
+      console.warn('[PatternSection] lineart preload:', err?.message ?? err);
+    });
+
+    return this._lineartPreloads;
   }
 }

@@ -8,12 +8,14 @@ export const PATTERN_VESSELS = [
     name: '妇好鸮尊',
     shortName: '鸮尊',
     lineartSrc: '/patterns/artifacts/gong_lines.png',
+    aspectRatio: '24803 / 19928',
   },
   {
     id: 'shenshou',
     name: '青铜神兽',
     shortName: '神兽',
     lineartSrc: '/patterns/artifacts/shenshou_lines.png',
+    aspectRatio: '24803 / 17089',
   },
 ];
 

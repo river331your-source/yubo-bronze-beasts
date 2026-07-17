@@ -21,12 +21,14 @@ import {
 } from '../debug/atlasViewportDiagnostics.js';
 
 const TARGET_SIZE = 3;
+const FBX_LOAD_TIMEOUT_MS = 15000;
 
 export class SceneManager {
   constructor(canvas) {
     this.canvas = canvas;
     claimCanvasScene(canvas, this);
     this.loadingEl = document.getElementById('model-loading');
+    this._loadingTextEl = this.loadingEl?.querySelector('.model-loading-text');
     this.artifacts = ARTIFACTS;
     this.currentIndex = 0;
     this.modelGroup = new THREE.Group();
@@ -47,6 +49,7 @@ export class SceneManager {
     this._clock = new THREE.Clock();
     this._lastGoodSize = { width: 1, height: 1 };
     this._resizeRetryId = null;
+    this._preloadIdleId = null;
     this._running = false;
     this._rafId = null;
     this._frameListeners = new Set();
@@ -259,6 +262,7 @@ export class SceneManager {
       console.log('[SceneManager] 模型资源已更新，清除 FBX 缓存');
     }
 
+    this._cancelPreload();
     this.currentIndex = index;
     const artifact = this.artifacts[index];
 
@@ -275,11 +279,14 @@ export class SceneManager {
       this._hideLoading();
       this.frameModel();
       logAtlasViewportDiagnostics('loadArtifact.cached', this);
+      this._schedulePreloadNext(this.currentIndex);
       return artifact;
     }
 
     try {
-      const fbx = await this._loadFBX(artifact.modelPath);
+      const fbx = await this._loadFBX(artifact.modelPath, {
+        onProgress: (progress) => this._updateLoadingProgress(progress),
+      });
       console.log('[SceneManager] FBX 加载成功:', artifact.name, artifact.modelPath);
       const model = this._prepareModel(fbx, artifact);
       this.loadedModels.set(artifact.id, model);
@@ -295,31 +302,99 @@ export class SceneManager {
       logAtlasViewportDiagnostics('loadArtifact.fbx', this);
     } catch (err) {
       console.warn(`模型加载失败 [${artifact.name}]:`, err.message);
-      const placeholder = createPlaceholderModel(artifact.id);
-      this._fitGroupToContainer(placeholder);
-      applyBronzePBRToModel(placeholder, this.envMap);
-      this.loadedModels.set(artifact.id, placeholder);
-      const instance = placeholder.clone(true);
-      this.modelContainer.add(instance);
-      this._buildPointCloud(instance);
-      this._frameToCenter();
-      this._hideLoading();
-      this.frameModel();
+      this._mountPlaceholder(artifact);
       logAtlasViewportDiagnostics('loadArtifact.placeholder', this);
     }
 
+    this._schedulePreloadNext(this.currentIndex);
     return artifact;
   }
 
-  _loadFBX(path) {
+  _mountPlaceholder(artifact) {
+    const placeholder = createPlaceholderModel(artifact.id);
+    this._fitGroupToContainer(placeholder);
+    applyBronzePBRToModel(placeholder, this.envMap);
+    this.loadedModels.set(artifact.id, placeholder);
+    const instance = placeholder.clone(true);
+    this.modelContainer.add(instance);
+    this._buildPointCloud(instance);
+    this._frameToCenter();
+    this._hideLoading();
+    this.frameModel();
+  }
+
+  _loadFBX(path, { onProgress } = {}) {
     return new Promise((resolve, reject) => {
+      let settled = false;
       const loader = new FBXLoader();
       const url = path
         .split('/')
         .map((seg, i) => (i === 0 || seg === '' ? seg : encodeURIComponent(seg)))
         .join('/');
-      loader.load(url, resolve, undefined, reject);
+
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+
+      const timer = setTimeout(() => {
+        finish(reject, new Error(`FBX 加载超时（${FBX_LOAD_TIMEOUT_MS / 1000}s）: ${path}`));
+      }, FBX_LOAD_TIMEOUT_MS);
+
+      loader.load(
+        url,
+        (fbx) => finish(resolve, fbx),
+        (progress) => onProgress?.(progress),
+        (err) => finish(reject, err ?? new Error(`FBX 加载失败: ${path}`))
+      );
     });
+  }
+
+  /** 当前文物就绪后，空闲预加载列表中的下一件 */
+  _schedulePreloadNext(fromIndex) {
+    const nextIndex = (fromIndex + 1) % this.artifacts.length;
+    const nextArtifact = this.artifacts[nextIndex];
+    if (this.loadedModels.has(nextArtifact.id)) return;
+
+    this._cancelPreload();
+
+    const run = () => {
+      this._preloadIdleId = null;
+      this._preloadModelAtIndex(nextIndex);
+    };
+
+    if (typeof requestIdleCallback === 'function') {
+      this._preloadIdleId = requestIdleCallback(run, { timeout: 4000 });
+    } else {
+      this._preloadIdleId = window.setTimeout(run, 200);
+    }
+  }
+
+  _cancelPreload() {
+    if (this._preloadIdleId == null) return;
+    if (typeof cancelIdleCallback === 'function') {
+      cancelIdleCallback(this._preloadIdleId);
+    } else {
+      clearTimeout(this._preloadIdleId);
+    }
+    this._preloadIdleId = null;
+  }
+
+  async _preloadModelAtIndex(index) {
+    const artifact = this.artifacts[index];
+    if (!artifact || this.loadedModels.has(artifact.id)) return;
+
+    try {
+      const fbx = await this._loadFBX(artifact.modelPath);
+      if (this.loadedModels.has(artifact.id)) return;
+      const model = this._prepareModel(fbx, artifact);
+      this.loadedModels.set(artifact.id, model);
+      console.log('[SceneManager] 预加载完成:', artifact.name);
+    } catch (err) {
+      console.warn(`[SceneManager] 预加载失败 [${artifact.name}]:`, err.message);
+    }
   }
 
   _prepareModel(fbx, artifact) {
@@ -401,11 +476,25 @@ export class SceneManager {
     this.modelGroup.scale.set(1, 1, 1);
   }
 
-  _showLoading() {
+  _showLoading(percent = null) {
     if (this.loadingEl) {
       this.loadingEl.hidden = false;
       this.loadingEl.classList.remove('fade-out');
     }
+    if (this._loadingTextEl) {
+      if (percent != null && percent >= 0) {
+        this._loadingTextEl.textContent = `模型加载中 · ${Math.min(99, percent)}%`;
+      } else {
+        this._loadingTextEl.textContent = '模型加载中…';
+      }
+    }
+  }
+
+  _updateLoadingProgress(progress) {
+    const total = progress?.total ?? 0;
+    if (total <= 0) return;
+    const pct = Math.round(((progress.loaded ?? 0) / total) * 100);
+    this._showLoading(pct);
   }
 
   _hideLoading() {
@@ -413,6 +502,9 @@ export class SceneManager {
       this.loadingEl.classList.add('fade-out');
       setTimeout(() => {
         if (this.loadingEl) this.loadingEl.hidden = true;
+        if (this._loadingTextEl) {
+          this._loadingTextEl.textContent = '模型加载中…';
+        }
       }, 320);
     }
   }
@@ -579,6 +671,7 @@ export class SceneManager {
   }
 
   dispose() {
+    this._cancelPreload();
     this.stopLoop();
     releaseCanvasScene(this.canvas, this);
     this._resizeObserver?.disconnect();

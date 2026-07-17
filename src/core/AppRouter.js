@@ -2,6 +2,8 @@
  * 全站版块路由 — 同一时刻仅一个版块活跃
  * 切换流程: 上一版块 onLeave → 更新 UI → 新版块 onEnter
  */
+import { purgeStaleBronzeGates } from '../interactions/BronzeDoorGate.js';
+
 export class AppRouter {
   constructor({ ui, sections }) {
     this.ui = ui;
@@ -11,6 +13,8 @@ export class AppRouter {
   }
 
   async switchSection(sectionId) {
+    purgeStaleBronzeGates();
+
     if (this._busy) return;
     if (!this.sections[sectionId]) return;
 

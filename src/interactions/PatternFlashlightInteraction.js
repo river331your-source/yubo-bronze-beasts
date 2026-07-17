@@ -1,47 +1,33 @@
 /**
- * 纹样探秘 · 器物线稿手电筒
- * 双层叠加（暗层 + 染金层）+ CSS mask 遮罩跟随鼠标/触屏/手势
+ * 纹样探秘 · 数字捶拓
+ * 暗底线稿 + 累积遮罩 ∩ 金色线稿（lighter 叠加），照过即留痕
  */
-const XIAOZUN_VESSEL_ID = 'fuhao-xiao-zun';
-const SHENSHOU_VESSEL_ID = 'shenshou';
+const GOLD_FILTER =
+  'sepia(1) saturate(4.8) hue-rotate(6deg) brightness(1.18)';
 
-const SHENSHOU_ROW_TOPS = [12, 28, 44, 60, 76, 90];
-const SHENSHOU_CONTOUR_X = 78;
-const SHENSHOU_LABEL_X = 86;
+const STAT_W = 88;
+const LIFT_THRESHOLD = 70;
+const LIFT_DURATION_MS = 1200;
+const RICE_PAPER = '#efe6d0';
 
-function _shenshouLinePoints(annotation, rowTop) {
-  const ax = annotation.ax * 100;
-  const ay = annotation.ay * 100;
-  if (ax < SHENSHOU_CONTOUR_X) {
-    return `${ax},${ay} ${SHENSHOU_CONTOUR_X},${ay} ${SHENSHOU_CONTOUR_X},${rowTop} ${SHENSHOU_LABEL_X},${rowTop}`;
-  }
-  if (Math.abs(ay - rowTop) < 0.01) {
-    return `${ax},${ay} ${SHENSHOU_LABEL_X},${rowTop}`;
-  }
-  return `${ax},${ay} ${SHENSHOU_LABEL_X},${ay} ${SHENSHOU_LABEL_X},${rowTop}`;
+/** 按 src 缓存染金线稿（一次性 filter，切换/缩放时直接 drawImage） */
+const goldLineartCache = new Map();
+
+function getOrBuildGoldCache(src, img) {
+  if (!src || !img?.naturalWidth) return null;
+  const cached = goldLineartCache.get(src);
+  if (cached) return cached;
+
+  const cv = document.createElement('canvas');
+  cv.width = img.naturalWidth;
+  cv.height = img.naturalHeight;
+  const ctx = cv.getContext('2d');
+  ctx.filter = GOLD_FILTER;
+  ctx.drawImage(img, 0, 0);
+  ctx.filter = 'none';
+  goldLineartCache.set(src, cv);
+  return cv;
 }
-
-const SHENSHOU_ANNOTATIONS = [
-  { id: 'longshou', ax: 0.635, ay: 0.26, label: '龙首' },
-  { id: 'shidi', ax: 0.62, ay: 0.36, label: '柿蒂形花' },
-  { id: 'hushen', ax: 0.60, ay: 0.56, label: '虎身' },
-  { id: 'fengniao', ax: 0.70, ay: 0.60, label: '凤鸟纹' },
-  { id: 'wowen', ax: 0.71, ay: 0.75, label: '涡纹' },
-  { id: 'guizu', ax: 0.66, ay: 0.90, label: '龟足' },
-];
-
-const XIAOZUN_HOTSPOTS = [
-  // 侧视（左半），标签朝右牵 side:'right'
-  { id: 'niao', x: 0.16, y: 0.14, r: 0.055, side: 'right', label: '鸟', text: '商人尊玄鸟为始祖，神鸟立于器首，通天引路。' },
-  { id: 'long', x: 0.23, y: 0.23, r: 0.05, side: 'right', label: '龙', text: '夔为独足神龙，盘绕通神，庇佑权柄。' },
-  { id: 'lw_s', x: 0.17, y: 0.35, r: 0.06, side: 'right', label: '龙纹', text: '龙行兽身，层叠卷曲，蓄势欲飞。' },
-  { id: 'panshe', x: 0.12, y: 0.5, r: 0.065, side: 'right', label: '盘蛇纹', text: '蛇蟠成盘，守护绵延，鸮尊最摄人一笔。' },
-  // 正视（右半），标签朝左牵 side:'left'
-  { id: 'lw_crown', x: 0.75, y: 0.13, r: 0.08, side: 'left', label: '龙纹', text: '龙行兽身，层叠卷曲，蓄势欲飞。' },
-  { id: 'chan_c', x: 0.75, y: 0.3, r: 0.06, side: 'left', label: '蝉纹', text: '蝉饮露而蜕壳重生，寓高洁与再生。' },
-  { id: 'chan_b', x: 0.75, y: 0.46, r: 0.06, side: 'left', label: '蝉纹', text: '蝉饮露而蜕壳重生，寓高洁与再生。' },
-  { id: 'lw_feet', x: 0.75, y: 0.68, r: 0.07, side: 'left', label: '龙纹', text: '龙行兽身，层叠卷曲，蓄势欲飞。' },
-];
 
 export class PatternFlashlightInteraction {
   /**
@@ -56,79 +42,118 @@ export class PatternFlashlightInteraction {
     this.goldLayer = stageEl.querySelector('.pattern-lineart--gold');
 
     this.active = false;
-    this._torchVisible = false;
-    this._gestureFlashlight = false;
+    this._gestureRubbing = false;
+    this._drawing = false;
     this._currentVesselId = null;
-    this._curHotspot = null;
-    this._curShenshouAnnotation = null;
-    this._showHotspotDebug = false;
-    this._annotationEl = null;
-    this._annotationDotEl = null;
-    this._annotationLineEl = null;
-    this._annotationLabelEl = null;
-    this._annotationTagEl = null;
-    this._annotationTextEl = null;
-    this._hotspotDebugLayerEl = null;
-    this._shenshouDebugMarkerEls = new Map();
-    this._shenshouDebugExportBtn = null;
-    this._shenshouDragState = null;
-    this._shenshouAnnotationsEl = null;
-    this._shenshouItemEls = [];
-    this._shenshouLineEls = [];
-    this._shenshouEndpointEls = [];
-    this._shenshouLabelEls = [];
+    this._currentVesselName = '';
+    this._currentLineartSrc = null;
+    this._goldCache = null;
+    this._dirty = false;
+    this._progress = 0;
+    this._w = 0;
+    this._h = 0;
+    this._statW = STAT_W;
+    this._statH = 70;
+    this._raf = null;
+    this._resizeDebounceTimer = null;
 
-    this._onMouseMove = (e) => {
-      if (!this.active || this._shenshouDragState) return;
-      this._setTorchFromClient(e.clientX, e.clientY);
+    this.maskCv = null;
+    this.maskCtx = null;
+    this.rubCv = null;
+    this.rubCtx = null;
+    this.artCv = null;
+    this.artCtx = null;
+    this.statsCv = null;
+    this.statsCtx = null;
+
+    this.rubCanvasEl = null;
+    this.displayCtx = null;
+    this._progressEl = null;
+    this._progressFillEl = null;
+    this._progressLabelEl = null;
+    this._topHintEl = null;
+    this._revealBtn = null;
+    this._repaperBtn = null;
+
+    /** @type {'rubbing'|'lifting'|'lifted'} */
+    this._liftPhase = 'rubbing';
+    this._liftT = 0;
+    this._liftAnimStart = 0;
+
+    if (this.goldLayer) {
+      this.goldLayer.setAttribute('aria-hidden', 'true');
+    }
+
+    this._createDisplayCanvas();
+    this._createProgressBar();
+    this._createTopHint();
+    this._createActionButtons();
+    this._createOffscreenCanvases();
+
+    this._onPointerDown = (e) => {
+      if (!this.active || e.button !== 0 || this._gestureRubbing || this._liftPhase !== 'rubbing') return;
+      if (e.target.closest('button')) return;
+      this._drawing = true;
+      this._tapFromClient(e.clientX, e.clientY);
     };
-    this._onTouchMove = (e) => {
-      if (!this.active || this._shenshouDragState || e.touches.length === 0) return;
-      const t = e.touches[0];
-      this._setTorchFromClient(t.clientX, t.clientY);
+    this._onPointerMove = (e) => {
+      if (!this.active || !this._drawing || this._gestureRubbing) return;
+      this._tapFromClient(e.clientX, e.clientY);
     };
-    this._onPointerLeave = () => {
-      if (!this.active || this._gestureFlashlight) return;
-      this._hideTorch();
+    this._onPointerUp = () => {
+      if (!this._drawing) return;
+      this._drawing = false;
+      this._computeProgress();
     };
 
-    stageEl.addEventListener('mousemove', this._onMouseMove);
-    stageEl.addEventListener('touchmove', this._onTouchMove, { passive: true });
-    stageEl.addEventListener('mouseleave', this._onPointerLeave);
-    stageEl.addEventListener('touchend', this._onPointerLeave);
-    stageEl.addEventListener('touchcancel', this._onPointerLeave);
+    this.rubCanvasEl.addEventListener('pointerdown', this._onPointerDown);
+    this.rubCanvasEl.addEventListener('pointermove', this._onPointerMove);
+    window.addEventListener('pointerup', this._onPointerUp);
+    window.addEventListener('pointercancel', this._onPointerUp);
 
-    this._createAnnotation();
-    this._createShenshouAnnotations();
-    this._createHotspotDebugLayer();
+    this._resizeObserver = new ResizeObserver(() => {
+      if (!this.active) return;
+      clearTimeout(this._resizeDebounceTimer);
+      this._resizeDebounceTimer = setTimeout(() => {
+        this._resizeDebounceTimer = null;
+        this._syncCanvasSize();
+      }, 150);
+    });
+    if (this.lineartStack) this._resizeObserver.observe(this.lineartStack);
   }
 
   activate() {
     this.active = true;
     const vessel = this.getVessel();
     if (vessel) this.setVessel(vessel);
-    this._updateVesselAnnotationMode();
-    this._hideTorch();
+    this._startLoop();
   }
 
   deactivate() {
     this.active = false;
-    this._gestureFlashlight = false;
-    this._hideTorch();
+    this._gestureRubbing = false;
+    this._drawing = false;
+    this._stopLoop();
   }
 
   /**
-   * 器物切换：底层与金色层同步换线稿 PNG
-   * @param {{ id: string, name: string, lineartSrc: string }} vessel
+   * 器物切换：暗底 / 素材层同步换线稿 PNG，清空捶拓遮罩
+   * @param {{ id: string, name: string, lineartSrc: string, aspectRatio?: string }} vessel
    */
   setVessel(vessel) {
     if (!vessel?.lineartSrc) return;
     if (this._currentVesselId === vessel.id) return;
 
     this._currentVesselId = vessel.id;
+    this._currentVesselName = vessel.name;
     const src = vessel.lineartSrc;
 
-    // 器物切换：双层叠加同时更新 src
+    if (this.lineartStack && vessel.aspectRatio) {
+      this.lineartStack.style.setProperty('--lineart-aspect', vessel.aspectRatio);
+    }
+
+    this._resetLiftState();
+
     if (this.dimLayer) {
       this.dimLayer.src = src;
       this.dimLayer.alt = `${vessel.name}线稿`;
@@ -142,221 +167,24 @@ export class PatternFlashlightInteraction {
       this.lineartStack?.classList.remove('pattern-lineart-stack--switching');
     }, 220);
 
-    this._hideTorch();
-    this._setCurrentHotspot(null);
-    this._setCurrentShenshouAnnotation(null);
-    this._updateVesselAnnotationMode();
-    // H 调试层失败不得中断器物切换（否则 id 已变、UI 未更新 → 再点早退卡死）
-    try {
-      this._renderHotspotDebugLayer();
-    } catch (err) {
-      console.warn('[PatternFlashlight] hotspot debug render failed:', err);
-    }
+    this._reloadLineart();
   }
 
   getCurrentVesselId() {
     return this._currentVesselId;
   }
 
-  /**
-   * 更新手电筒光斑位置（金色图层内像素坐标，供外部/手势调用）
-   * @param {number} x
-   * @param {number} y
-   */
   setTorchPos(x, y) {
-    if (!this.goldLayer) return;
-    // 遮罩跟随：radial-gradient 圆心绑定 CSS 变量
-    this.goldLayer.style.setProperty('--torch-x', `${x}px`);
-    this.goldLayer.style.setProperty('--torch-y', `${y}px`);
-    this.goldLayer.classList.add('pattern-lineart--lit');
-    this._torchVisible = true;
-    this._updateHotspotHit(x, y);
-  }
-
-  /** 将视口 client 坐标转为 goldLayer 归一化 ax/ay */
-  _clientToGoldNorm(clientX, clientY) {
-    const rect = this.goldLayer?.getBoundingClientRect();
-    if (!rect || rect.width === 0 || rect.height === 0) return null;
-    return {
-      ax: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      ay: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
-    };
-  }
-
-  /** goldLayer 归一化坐标 → 舞台百分比（用于 DOM / SVG 定位） */
-  _goldNormToStagePercent(ax, ay) {
-    const goldRect = this.goldLayer?.getBoundingClientRect();
-    const stageRect = this.stageEl?.getBoundingClientRect();
-    if (!goldRect || !stageRect || !goldRect.width || !stageRect.width) {
-      return { x: ax * 100, y: ay * 100 };
-    }
-    const absX = goldRect.left + ax * goldRect.width;
-    const absY = goldRect.top + ay * goldRect.height;
-    return {
-      x: ((absX - stageRect.left) / stageRect.width) * 100,
-      y: ((absY - stageRect.top) / stageRect.height) * 100,
-    };
-  }
-
-  _formatShenshouDebugLabel(annotation) {
-    return `${annotation.id}  ax:${annotation.ax.toFixed(3)} ay:${annotation.ay.toFixed(3)}`;
-  }
-
-  _updateShenshouAnchorVisual(annotationId) {
-    const index = SHENSHOU_ANNOTATIONS.findIndex((item) => item.id === annotationId);
-    if (index < 0) return;
-
-    const annotation = SHENSHOU_ANNOTATIONS[index];
-    const rowTop = SHENSHOU_ROW_TOPS[index];
-    const stagePos = this._goldNormToStagePercent(annotation.ax, annotation.ay);
-    const stageAnnotation = {
-      ax: stagePos.x / 100,
-      ay: stagePos.y / 100,
-    };
-
-    const endpoint = this._shenshouEndpointEls.find((item) => item.id === annotationId);
-    if (endpoint) {
-      endpoint.el.style.left = `${stagePos.x}%`;
-      endpoint.el.style.top = `${stagePos.y}%`;
-    }
-
-    const line = this._shenshouLineEls.find((item) => item.id === annotationId);
-    if (line) {
-      line.pathEl.setAttribute('points', _shenshouLinePoints(stageAnnotation, rowTop));
-    }
-
-    const markerEl = this._shenshouDebugMarkerEls.get(annotationId);
-    if (markerEl) {
-      markerEl.style.left = `${stagePos.x}%`;
-      markerEl.style.top = `${stagePos.y}%`;
-      const labelEl = markerEl.querySelector('.pattern-hotspot-debug-marker__label');
-      if (labelEl) {
-        labelEl.textContent = this._formatShenshouDebugLabel(annotation);
-      }
-    }
-  }
-
-  _applyShenshouDrag(clientX, clientY, annotationId) {
-    const norm = this._clientToGoldNorm(clientX, clientY);
-    if (!norm) return;
-
-    const annotation = SHENSHOU_ANNOTATIONS.find((item) => item.id === annotationId);
-    if (!annotation) return;
-
-    annotation.ax = norm.ax;
-    annotation.ay = norm.ay;
-    this._updateShenshouAnchorVisual(annotationId);
-  }
-
-  _onShenshouMarkerPointerDown = (e) => {
-    if (!this._showHotspotDebug || this._currentVesselId !== SHENSHOU_VESSEL_ID) return;
-
-    const markerEl = e.currentTarget;
-    const annotationId = markerEl.dataset.id;
-    if (!annotationId) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    markerEl.setPointerCapture(e.pointerId);
-    this._shenshouDragState = { id: annotationId, pointerId: e.pointerId };
-    markerEl.classList.add('dragging');
-  };
-
-  _onShenshouMarkerPointerMove = (e) => {
-    if (!this._shenshouDragState || e.pointerId !== this._shenshouDragState.pointerId) return;
-    if (e.currentTarget.dataset.id !== this._shenshouDragState.id) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    this._applyShenshouDrag(e.clientX, e.clientY, this._shenshouDragState.id);
-  };
-
-  _onShenshouMarkerPointerUp = (e) => {
-    if (!this._shenshouDragState || e.pointerId !== this._shenshouDragState.pointerId) return;
-
-    const markerEl = e.currentTarget;
-    try {
-      if (markerEl.hasPointerCapture?.(e.pointerId)) {
-        markerEl.releasePointerCapture(e.pointerId);
-      }
-    } catch {
-      /* 捕获已失效时 releasePointerCapture 会抛 InvalidStateError */
-    }
-    markerEl.classList.remove('dragging');
-    this._shenshouDragState = null;
-  };
-
-  _teardownShenshouDebugDrag() {
-    this._shenshouDragState = null;
-    this._shenshouDebugMarkerEls?.clear?.();
-    this._shenshouDebugExportBtn = null;
-    this._hotspotDebugLayerEl?.classList.remove('pattern-hotspot-debug-overlay--shenshou');
-  }
-
-  _renderShenshouDebugLayer(annotations) {
-    if (!this._hotspotDebugLayerEl) return;
-
-    this._shenshouDebugMarkerEls.clear();
-
-    for (const annotation of annotations) {
-      const stagePos = this._goldNormToStagePercent(annotation.ax, annotation.ay);
-      const markerEl = document.createElement('div');
-      markerEl.className = 'pattern-hotspot-debug-marker pattern-hotspot-debug-marker--draggable';
-      markerEl.dataset.id = annotation.id;
-      markerEl.style.left = `${stagePos.x}%`;
-      markerEl.style.top = `${stagePos.y}%`;
-      markerEl.style.width = `${0.09 * 200}%`;
-      markerEl.style.height = `${0.09 * 200}%`;
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'pattern-hotspot-debug-marker__label';
-      nameEl.textContent = this._formatShenshouDebugLabel(annotation);
-
-      markerEl.appendChild(nameEl);
-      markerEl.addEventListener('pointerdown', this._onShenshouMarkerPointerDown);
-      markerEl.addEventListener('pointermove', this._onShenshouMarkerPointerMove);
-      markerEl.addEventListener('pointerup', this._onShenshouMarkerPointerUp);
-      markerEl.addEventListener('pointercancel', this._onShenshouMarkerPointerUp);
-
-      this._hotspotDebugLayerEl.appendChild(markerEl);
-      this._shenshouDebugMarkerEls.set(annotation.id, markerEl);
-    }
-
-    const exportBtn = document.createElement('button');
-    exportBtn.type = 'button';
-    exportBtn.className = 'pattern-hotspot-debug-export-btn';
-    exportBtn.textContent = 'P 导出坐标';
-    exportBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.exportShenshouAnnotations();
-    });
-    this._hotspotDebugLayerEl.appendChild(exportBtn);
-    this._shenshouDebugExportBtn = exportBtn;
-  }
-
-  /** 将视口 client 坐标转为金色图层局部坐标 */
-  _clientToGoldLocal(clientX, clientY) {
-    const rect = this.goldLayer?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return null;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  }
-
-  _setTorchFromClient(clientX, clientY) {
-    const local = this._clientToGoldLocal(clientX, clientY);
-    if (!local) return;
-    this.setTorchPos(local.x, local.y);
+    this._tap(x, y);
   }
 
   onGesture(gesture) {
-    this._gestureFlashlight = gesture === 'ok';
-    if (!this._gestureFlashlight && !this._torchVisible) {
-      this._hideTorch();
-    }
+    this._gestureRubbing = gesture === 'ok';
+    if (this._gestureRubbing) this._drawing = false;
   }
 
   update(gestureController) {
-    if (!this.active || !this._gestureFlashlight || !gestureController) return;
+    if (!this.active || this._liftPhase !== 'rubbing' || !this._gestureRubbing || !gestureController) return;
 
     const screenPos = gestureController.getIndexFingerScreenPos();
     if (!screenPos) return;
@@ -366,327 +194,540 @@ export class PatternFlashlightInteraction {
 
     const absX = viewport.left + screenPos.x * viewport.width;
     const absY = viewport.top + screenPos.y * viewport.height;
-    this._setTorchFromClient(absX, absY);
-  }
-
-  _hideTorch() {
-    this.goldLayer?.classList.remove('pattern-lineart--lit');
-    this._torchVisible = false;
-    if (this._currentVesselId === XIAOZUN_VESSEL_ID) {
-      this._setCurrentHotspot(null);
-    } else if (this._currentVesselId === SHENSHOU_VESSEL_ID) {
-      this._setCurrentShenshouAnnotation(null);
-    }
+    this._tapFromClient(absX, absY);
   }
 
   toggleHotspotDebug() {
-    this._showHotspotDebug = !this._showHotspotDebug;
-    if (!this._showHotspotDebug) {
-      this._teardownShenshouDebugDrag();
-    }
-    this._renderHotspotDebugLayer();
-    return this._showHotspotDebug;
+    return false;
   }
 
-  /** 神兽 H 调试：导出当前六个锚点坐标到 console（按 P 或点按钮） */
-  exportShenshouAnnotations() {
-    if (!this._showHotspotDebug || this._currentVesselId !== SHENSHOU_VESSEL_ID) return;
-
-    const lines = SHENSHOU_ANNOTATIONS.map(
-      (annotation) =>
-        `  { id: '${annotation.id}', ax: ${annotation.ax.toFixed(3)}, ay: ${annotation.ay.toFixed(3)}, label: '${annotation.label}' },`,
-    );
-    const output = `const SHENSHOU_ANNOTATIONS = [\n${lines.join('\n')}\n];`;
-    console.log('%c[神兽锚点导出]', 'color:#E8CB6A;font-weight:bold', '\n' + output);
-  }
-
-  _getActiveHotspots() {
-    if (this._currentVesselId !== XIAOZUN_VESSEL_ID) return [];
-    return XIAOZUN_HOTSPOTS;
-  }
-
-  _getShenshouAnnotations() {
-    if (this._currentVesselId !== SHENSHOU_VESSEL_ID) return [];
-    return SHENSHOU_ANNOTATIONS;
-  }
-
-  _updateHotspotHit(x, y) {
-    if (!this.goldLayer) return;
-
-    const W = this.goldLayer.offsetWidth || this.goldLayer.clientWidth;
-    const H = this.goldLayer.offsetHeight || this.goldLayer.clientHeight;
-    if (!W || !H) {
-      this._setCurrentHotspot(null);
-      this._setCurrentShenshouAnnotation(null);
-      return;
-    }
-
-    if (this._currentVesselId === XIAOZUN_VESSEL_ID) {
-      this._updateXiaozunHit(x, y, W, H);
-    } else if (this._currentVesselId === SHENSHOU_VESSEL_ID) {
-      this._updateShenshouHit(x, y, W, H);
-    } else {
-      this._setCurrentHotspot(null);
-      this._setCurrentShenshouAnnotation(null);
-    }
-  }
-
-  _updateXiaozunHit(x, y, W, H) {
-    let hitHotspot = null;
-    for (const hotspot of XIAOZUN_HOTSPOTS) {
-      const hx = hotspot.x * W;
-      const hy = hotspot.y * H;
-      const hr = hotspot.r * W;
-      if (Math.hypot(x - hx, y - hy) < hr) {
-        hitHotspot = hotspot;
-        break;
-      }
-    }
-    this._setCurrentHotspot(hitHotspot);
-  }
-
-  _updateShenshouHit(x, y, W, H) {
-    const threshold = 0.09 * W;
-    let hitAnnotation = null;
-    let closestDist = Infinity;
-
-    for (const annotation of SHENSHOU_ANNOTATIONS) {
-      const hx = annotation.ax * W;
-      const hy = annotation.ay * H;
-      const dist = Math.hypot(x - hx, y - hy);
-      if (dist < threshold && dist < closestDist) {
-        closestDist = dist;
-        hitAnnotation = annotation;
-      }
-    }
-    this._setCurrentShenshouAnnotation(hitAnnotation);
-  }
-
-  _setCurrentHotspot(hotspot) {
-    if (this._curHotspot?.id === hotspot?.id) return;
-    this._curHotspot = hotspot ?? null;
-    this._updateAnnotation();
-  }
-
-  _setCurrentShenshouAnnotation(annotation) {
-    if (this._curShenshouAnnotation?.id === annotation?.id) return;
-    this._curShenshouAnnotation = annotation ?? null;
-    this._updateShenshouAnnotationHighlight();
-  }
-
-  _updateVesselAnnotationMode() {
-    // 纹样介绍浮层（引线 + 【标签】文案）整层关闭，保留手电筒高亮与底部器物切换
-    if (this._annotationEl) {
-      this._annotationEl.hidden = true;
-      this._annotationEl.classList.remove('on');
-    }
-    if (this._shenshouAnnotationsEl) {
-      this._shenshouAnnotationsEl.hidden = true;
-    }
-  }
-
-  _createAnnotation() {
-    if (!this.stageEl || this._annotationEl) return;
-    const annotationEl = document.createElement('div');
-    annotationEl.id = 'pattern-annotation';
-    annotationEl.className = 'pattern-annotation';
-    annotationEl.hidden = true;
-
-    const dotEl = document.createElement('span');
-    dotEl.className = 'anno-dot';
-    const lineEl = document.createElement('span');
-    lineEl.className = 'anno-line';
-    const labelEl = document.createElement('div');
-    labelEl.className = 'anno-label';
-
-    const tagEl = document.createElement('p');
-    tagEl.className = 'anno-label__tag';
-    const textEl = document.createElement('p');
-    textEl.className = 'anno-label__text';
-
-    labelEl.appendChild(tagEl);
-    labelEl.appendChild(textEl);
-    annotationEl.appendChild(dotEl);
-    annotationEl.appendChild(lineEl);
-    annotationEl.appendChild(labelEl);
-    this.stageEl.appendChild(annotationEl);
-
-    this._annotationEl = annotationEl;
-    this._annotationDotEl = dotEl;
-    this._annotationLineEl = lineEl;
-    this._annotationLabelEl = labelEl;
-    this._annotationTagEl = tagEl;
-    this._annotationTextEl = textEl;
-  }
-
-  _updateAnnotation() {
-    // 介绍纹样 UI 已关闭，不再展开引线/文案
-    if (!this._annotationEl) return;
-    this._annotationEl.hidden = true;
-    this._annotationEl.classList.remove('on');
-  }
-
-  _createShenshouAnnotations() {
-    if (!this.stageEl || this._shenshouAnnotationsEl) return;
-
-    const containerEl = document.createElement('div');
-    containerEl.id = 'shenshou-annotations';
-    containerEl.className = 'shenshou-annotations';
-    containerEl.hidden = true;
-
-    SHENSHOU_ANNOTATIONS.forEach((annotation, index) => {
-      const rowTop = SHENSHOU_ROW_TOPS[index];
-      const anchorX = annotation.ax * 100;
-      const anchorY = annotation.ay * 100;
-
-      const itemEl = document.createElement('div');
-      itemEl.className = 'shenshou-anno-item';
-      itemEl.dataset.id = annotation.id;
-
-      const endpointEl = document.createElement('span');
-      endpointEl.className = 'anno-endpoint';
-      endpointEl.dataset.id = annotation.id;
-      endpointEl.style.left = `${anchorX}%`;
-      endpointEl.style.top = `${anchorY}%`;
-      itemEl.appendChild(endpointEl);
-      this._shenshouEndpointEls.push({ id: annotation.id, el: endpointEl });
-
-      const lineEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      lineEl.classList.add('anno-line');
-      lineEl.dataset.id = annotation.id;
-      lineEl.setAttribute('viewBox', '0 0 100 100');
-      lineEl.setAttribute('preserveAspectRatio', 'none');
-      lineEl.setAttribute('aria-hidden', 'true');
-
-      const polylineEl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      polylineEl.setAttribute('fill', 'none');
-      polylineEl.setAttribute('points', _shenshouLinePoints(annotation, rowTop));
-      lineEl.appendChild(polylineEl);
-      itemEl.appendChild(lineEl);
-      this._shenshouLineEls.push({ id: annotation.id, el: lineEl, pathEl: polylineEl });
-
-      const labelEl = document.createElement('div');
-      labelEl.className = 'anno-label';
-      labelEl.dataset.id = annotation.id;
-      labelEl.style.left = `${SHENSHOU_LABEL_X}%`;
-      labelEl.style.top = `${rowTop}%`;
-      labelEl.textContent = `【${annotation.label}】`;
-      itemEl.appendChild(labelEl);
-      this._shenshouLabelEls.push({ id: annotation.id, el: labelEl });
-
-      containerEl.appendChild(itemEl);
-      this._shenshouItemEls.push({ id: annotation.id, el: itemEl });
-    });
-
-    this.stageEl.appendChild(containerEl);
-    this._shenshouAnnotationsEl = containerEl;
-  }
-
-  _updateShenshouAnnotationHighlight() {
-    const activeId = this._curShenshouAnnotation?.id ?? null;
-
-    for (const { id, el } of this._shenshouItemEls) {
-      el.classList.toggle('active', id === activeId);
-    }
-    for (const { id, el } of this._shenshouLabelEls) {
-      el.classList.toggle('active', id === activeId);
-    }
-    for (const { id, el } of this._shenshouLineEls) {
-      el.classList.toggle('active', id === activeId);
-    }
-    for (const { id, el } of this._shenshouEndpointEls) {
-      el.classList.toggle('active', id === activeId);
-    }
-  }
-
-  _createHotspotDebugLayer() {
-    if (!this.stageEl || this._hotspotDebugLayerEl) return;
-    const layerEl = document.createElement('div');
-    layerEl.id = 'pattern-hotspot-debug-overlay';
-    layerEl.className = 'pattern-hotspot-debug-overlay';
-    layerEl.hidden = true;
-    this.stageEl.appendChild(layerEl);
-    this._hotspotDebugLayerEl = layerEl;
-  }
-
-  _renderHotspotDebugLayer() {
-    if (!this._hotspotDebugLayerEl) return;
-    if (!(this._shenshouDebugMarkerEls instanceof Map)) {
-      this._shenshouDebugMarkerEls = new Map();
-    }
-
-    this._teardownShenshouDebugDrag();
-    this._hotspotDebugLayerEl.innerHTML = '';
-
-    const isShenshou = this._currentVesselId === SHENSHOU_VESSEL_ID;
-    const shenshouAnnotations = this._getShenshouAnnotations();
-    const xiaozunHotspots = this._getActiveHotspots();
-
-    if (isShenshou) {
-      const shouldShow = this._showHotspotDebug && shenshouAnnotations.length > 0;
-      this._hotspotDebugLayerEl.hidden = !shouldShow;
-      if (!shouldShow) return;
-
-      this._hotspotDebugLayerEl.classList.add('pattern-hotspot-debug-overlay--shenshou');
-      this._renderShenshouDebugLayer(shenshouAnnotations);
-      return;
-    }
-
-    this._hotspotDebugLayerEl.classList.remove('pattern-hotspot-debug-overlay--shenshou');
-
-    const debugMarkers = xiaozunHotspots.map((hotspot) => ({
-      id: hotspot.id,
-      x: hotspot.x,
-      y: hotspot.y,
-      r: hotspot.r,
-    }));
-
-    const shouldShow = this._showHotspotDebug && debugMarkers.length > 0;
-    this._hotspotDebugLayerEl.hidden = !shouldShow;
-    if (!shouldShow) return;
-
-    for (const marker of debugMarkers) {
-      const markerEl = document.createElement('div');
-      markerEl.className = 'pattern-hotspot-debug-marker';
-      markerEl.style.left = `${marker.x * 100}%`;
-      markerEl.style.top = `${marker.y * 100}%`;
-      markerEl.style.width = `${marker.r * 200}%`;
-      markerEl.style.height = `${marker.r * 200}%`;
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'pattern-hotspot-debug-marker__label';
-      nameEl.textContent = marker.id;
-
-      markerEl.appendChild(nameEl);
-      this._hotspotDebugLayerEl.appendChild(markerEl);
-    }
-  }
+  exportShenshouAnnotations() {}
 
   dispose() {
     this.deactivate();
-    this._teardownShenshouDebugDrag();
-    this.stageEl.removeEventListener('mousemove', this._onMouseMove);
-    this.stageEl.removeEventListener('touchmove', this._onTouchMove);
-    this.stageEl.removeEventListener('mouseleave', this._onPointerLeave);
-    this.stageEl.removeEventListener('touchend', this._onPointerLeave);
-    this.stageEl.removeEventListener('touchcancel', this._onPointerLeave);
+    clearTimeout(this._resizeDebounceTimer);
+    this._resizeDebounceTimer = null;
+    this._resizeObserver?.disconnect();
+    this.rubCanvasEl?.removeEventListener('pointerdown', this._onPointerDown);
+    this.rubCanvasEl?.removeEventListener('pointermove', this._onPointerMove);
+    window.removeEventListener('pointerup', this._onPointerUp);
+    window.removeEventListener('pointercancel', this._onPointerUp);
 
-    this._annotationEl?.remove();
-    this._annotationEl = null;
-    this._annotationDotEl = null;
-    this._annotationLineEl = null;
-    this._annotationLabelEl = null;
-    this._annotationTagEl = null;
-    this._annotationTextEl = null;
+    this.rubCanvasEl?.remove();
+    this.rubCanvasEl = null;
+    this.displayCtx = null;
 
-    this._hotspotDebugLayerEl?.remove();
-    this._hotspotDebugLayerEl = null;
+    this._progressEl?.remove();
+    this._progressEl = null;
+    this._progressFillEl = null;
+    this._progressLabelEl = null;
 
-    this._shenshouAnnotationsEl?.remove();
-    this._shenshouAnnotationsEl = null;
-    this._shenshouItemEls = [];
-    this._shenshouLineEls = [];
-    this._shenshouEndpointEls = [];
-    this._shenshouLabelEls = [];
+    this._topHintEl?.remove();
+    this._topHintEl = null;
+    this._revealBtn?.remove();
+    this._revealBtn = null;
+    this._repaperBtn?.remove();
+    this._repaperBtn = null;
+
+    this.maskCv = null;
+    this.maskCtx = null;
+    this.rubCv = null;
+    this.rubCtx = null;
+    this.artCv = null;
+    this.artCtx = null;
+    this.statsCv = null;
+    this.statsCtx = null;
+    this._goldCache = null;
   }
+
+  /* ---------- canvas 基础设施 ---------- */
+
+  _createDisplayCanvas() {
+    if (!this.lineartStack) return;
+    this.rubCanvasEl = document.createElement('canvas');
+    this.rubCanvasEl.className = 'pattern-rub-canvas';
+    this.lineartStack.appendChild(this.rubCanvasEl);
+    this.displayCtx = this.rubCanvasEl.getContext('2d');
+  }
+
+  _createOffscreenCanvases() {
+    this.maskCv = document.createElement('canvas');
+    this.maskCtx = this.maskCv.getContext('2d');
+    this.rubCv = document.createElement('canvas');
+    this.rubCtx = this.rubCv.getContext('2d');
+    this.artCv = document.createElement('canvas');
+    this.artCtx = this.artCv.getContext('2d');
+    this.statsCv = document.createElement('canvas');
+    this.statsCtx = this.statsCv.getContext('2d');
+  }
+
+  _createProgressBar() {
+    const bar = document.createElement('div');
+    bar.className = 'pattern-rub-progress';
+    Object.assign(bar.style, {
+      position: 'absolute',
+      left: '8%',
+      right: '8%',
+      bottom: '4%',
+      zIndex: '6',
+      pointerEvents: 'none',
+    });
+
+    const track = document.createElement('div');
+    Object.assign(track.style, {
+      height: '3px',
+      background: 'rgba(201,168,76,0.18)',
+      borderRadius: '2px',
+      overflow: 'hidden',
+    });
+
+    const fill = document.createElement('div');
+    fill.className = 'pattern-rub-progress__fill';
+    Object.assign(fill.style, {
+      height: '100%',
+      width: '0%',
+      background: 'linear-gradient(90deg, #c9a84c, #fff3c4)',
+      borderRadius: '2px',
+      transition: 'width 0.35s ease',
+    });
+
+    const label = document.createElement('span');
+    label.className = 'pattern-rub-progress__label';
+    Object.assign(label.style, {
+      display: 'block',
+      marginTop: '6px',
+      textAlign: 'center',
+      fontSize: '12px',
+      letterSpacing: '0.2em',
+      color: 'rgba(201,168,76,0.65)',
+    });
+    label.textContent = '已拓 0%';
+
+    track.appendChild(fill);
+    bar.appendChild(track);
+    bar.appendChild(label);
+    this.stageEl.appendChild(bar);
+
+    this._progressEl = bar;
+    this._progressFillEl = fill;
+    this._progressLabelEl = label;
+  }
+
+  _updateProgressUI() {
+    const pct = Math.round(this._progress);
+    if (this._progressFillEl) this._progressFillEl.style.width = `${pct}%`;
+    if (this._progressLabelEl) this._progressLabelEl.textContent = `已拓 ${pct}%`;
+    this._updateActionButtons();
+  }
+
+  _createTopHint() {
+    const hint = document.createElement('div');
+    hint.className = 'pattern-rub-top-hint';
+    Object.assign(hint.style, {
+      position: 'absolute',
+      top: '9%',
+      left: '0',
+      right: '0',
+      zIndex: '6',
+      textAlign: 'center',
+      fontSize: '14px',
+      letterSpacing: '0.35em',
+      color: 'rgba(201, 168, 76, 0.72)',
+      pointerEvents: 'none',
+      opacity: '0',
+      transition: 'opacity 0.45s ease',
+    });
+    this.stageEl.appendChild(hint);
+    this._topHintEl = hint;
+  }
+
+  _createActionButtons() {
+    const baseBtn = {
+      position: 'absolute',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '7',
+      padding: '8px 22px',
+      borderRadius: '999px',
+      border: '1px solid rgba(201, 168, 76, 0.55)',
+      background: 'rgba(7, 10, 8, 0.88)',
+      color: 'rgba(201, 168, 76, 0.92)',
+      fontSize: '12px',
+      letterSpacing: '0.35em',
+      cursor: 'pointer',
+      pointerEvents: 'auto',
+      opacity: '0',
+      transition: 'opacity 0.4s ease, border-color 0.25s ease, box-shadow 0.25s ease',
+      boxShadow: '0 0 12px rgba(201, 168, 76, 0.12)',
+    };
+
+    this._revealBtn = document.createElement('button');
+    this._revealBtn.type = 'button';
+    this._revealBtn.className = 'pattern-rub-reveal-btn';
+    this._revealBtn.textContent = '揭 纸';
+    Object.assign(this._revealBtn.style, baseBtn, { bottom: '11%' });
+    this._revealBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._startLift();
+    });
+
+    this._repaperBtn = document.createElement('button');
+    this._repaperBtn.type = 'button';
+    this._repaperBtn.className = 'pattern-rub-repaper-btn';
+    this._repaperBtn.textContent = '重新铺纸';
+    Object.assign(this._repaperBtn.style, baseBtn, { bottom: '11%', letterSpacing: '0.22em' });
+    this._repaperBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._repaper();
+    });
+
+    this.stageEl.appendChild(this._revealBtn);
+    this.stageEl.appendChild(this._repaperBtn);
+    this._updateActionButtons();
+    this._updateTopHint();
+  }
+
+  _updateTopHint() {
+    if (!this._topHintEl) return;
+    if (this._liftPhase === 'lifted') {
+      this._topHintEl.textContent = `拓 片 已 成 · ${this._currentVesselName || ''}`;
+      this._topHintEl.style.opacity = '1';
+    } else {
+      this._topHintEl.textContent = '';
+      this._topHintEl.style.opacity = '0';
+    }
+  }
+
+  _updateActionButtons() {
+    const showReveal =
+      this._liftPhase === 'rubbing' && this._progress >= LIFT_THRESHOLD;
+    const showRepaper = this._liftPhase === 'lifted';
+
+    if (this._revealBtn) {
+      this._revealBtn.style.opacity = showReveal ? '1' : '0';
+      this._revealBtn.style.pointerEvents = showReveal ? 'auto' : 'none';
+    }
+    if (this._repaperBtn) {
+      this._repaperBtn.style.opacity = showRepaper ? '1' : '0';
+      this._repaperBtn.style.pointerEvents = showRepaper ? 'auto' : 'none';
+    }
+    if (this._progressEl) {
+      this._progressEl.style.transition = 'opacity 0.4s ease';
+      this._progressEl.style.opacity = this._liftPhase === 'lifted' ? '0' : '1';
+    }
+  }
+
+  _resetLiftState() {
+    this._liftPhase = 'rubbing';
+    this._liftT = 0;
+    this._liftAnimStart = 0;
+    this._drawing = false;
+    this._updateTopHint();
+    this._updateActionButtons();
+  }
+
+  _startLift() {
+    if (this._liftPhase !== 'rubbing' || this._progress < LIFT_THRESHOLD) return;
+    this._forceCompose();
+    this._dirty = false;
+    this._drawing = false;
+    this._liftPhase = 'lifting';
+    this._liftAnimStart = performance.now();
+    this._liftT = 0;
+    this._updateActionButtons();
+  }
+
+  _repaper() {
+    this._clearMask();
+    this._resetLiftState();
+    this._dirty = true;
+  }
+
+  _updateLiftAnim() {
+    if (this._liftPhase !== 'lifting') return;
+    const raw = Math.min(1, (performance.now() - this._liftAnimStart) / LIFT_DURATION_MS);
+    this._liftT = 1 - Math.pow(1 - raw, 3);
+    if (raw >= 1) {
+      this._liftPhase = 'lifted';
+      this._liftT = 1;
+      this._updateTopHint();
+      this._updateActionButtons();
+    }
+  }
+
+  _forceCompose() {
+    if (!this.rubCtx || !this._w || !this._h) return;
+    this.rubCtx.clearRect(0, 0, this._w, this._h);
+    this.rubCtx.drawImage(this.maskCv, 0, 0);
+    this.rubCtx.globalCompositeOperation = 'source-in';
+    this.rubCtx.drawImage(this.artCv, 0, 0);
+    this.rubCtx.globalCompositeOperation = 'source-over';
+    this._dirty = false;
+  }
+
+  async _reloadLineart() {
+    try {
+      await Promise.all([
+        this._waitImage(this.dimLayer),
+        this._waitImage(this.goldLayer),
+      ]);
+    } catch {
+      /* decode 失败时仍尝试按当前尺寸同步 */
+    }
+
+    this._currentLineartSrc = this.goldLayer?.src ?? null;
+    this._goldCache = getOrBuildGoldCache(this._currentLineartSrc, this.goldLayer);
+
+    this._syncCanvasSize();
+    this._clearMask();
+    this._dirty = true;
+  }
+
+  _waitImage(img) {
+    if (!img) return Promise.resolve();
+    if (img.complete && img.naturalWidth) return img.decode?.() ?? Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', fail);
+        resolve();
+      };
+      const fail = () => {
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', fail);
+        reject(new Error('lineart load failed'));
+      };
+      img.addEventListener('load', done);
+      img.addEventListener('error', fail);
+    });
+  }
+
+  _syncCanvasSize() {
+    const w = this.dimLayer?.offsetWidth || this.dimLayer?.clientWidth || 0;
+    const h = this.dimLayer?.offsetHeight || this.dimLayer?.clientHeight || 0;
+    if (!w || !h) return;
+
+    this._w = w;
+    this._h = h;
+    this._statW = STAT_W;
+    this._statH = Math.max(1, Math.round(STAT_W * h / w));
+
+    for (const cv of [this.maskCv, this.rubCv, this.artCv, this.rubCanvasEl]) {
+      if (!cv) continue;
+      cv.width = w;
+      cv.height = h;
+    }
+    if (this.statsCv) {
+      this.statsCv.width = this._statW;
+      this.statsCv.height = this._statH;
+    }
+
+    this._paintArtLayer();
+    this._dirty = true;
+  }
+
+  _paintArtLayer() {
+    if (!this.artCtx || !this._goldCache || !this._w || !this._h) return;
+    this.artCtx.clearRect(0, 0, this._w, this._h);
+    this.artCtx.drawImage(this._goldCache, 0, 0, this._w, this._h);
+  }
+
+  _clearMask() {
+    if (this.maskCtx && this._w && this._h) {
+      this.maskCtx.clearRect(0, 0, this._w, this._h);
+    }
+    if (this.statsCtx && this._statW && this._statH) {
+      this.statsCtx.clearRect(0, 0, this._statW, this._statH);
+    }
+    this._progress = 0;
+    this._updateProgressUI();
+    this._dirty = true;
+  }
+
+  /* ---------- 捶拓核心 ---------- */
+
+  _tapFromClient(clientX, clientY) {
+    const local = this._clientToGoldLocal(clientX, clientY);
+    if (!local) return;
+    this._tap(local.x, local.y);
+  }
+
+  _clientToGoldLocal(clientX, clientY) {
+    const rect = this.dimLayer?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return null;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  _tap(x, y) {
+    if (this._liftPhase !== 'rubbing' || !this.maskCtx || !this._w || !this._h) return;
+
+    const R = 30;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.pow(Math.random(), 0.62) * R;
+      const px = x + Math.cos(a) * d;
+      const py = y + Math.sin(a) * d;
+      const fade = 1 - d / R;
+      this.maskCtx.globalCompositeOperation = 'lighter';
+      this.maskCtx.fillStyle = `rgba(255,255,255,${(0.16 * fade).toFixed(3)})`;
+      this.maskCtx.beginPath();
+      this.maskCtx.arc(px, py, Math.random() * 3.4 + 1.4, 0, Math.PI * 2);
+      this.maskCtx.fill();
+    }
+    this.maskCtx.globalCompositeOperation = 'source-over';
+
+    this._tapStats(x, y);
+    this._dirty = true;
+  }
+
+  _tapStats(x, y) {
+    if (!this.statsCtx || !this._statW || !this._statH) return;
+
+    const scaleX = this._statW / this._w;
+    const scaleY = this._statH / this._h;
+    const sx = x * scaleX;
+    const sy = y * scaleY;
+    const R = 30 * scaleX;
+
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.pow(Math.random(), 0.62) * R;
+      const px = sx + Math.cos(a) * d;
+      const py = sy + Math.sin(a) * d;
+      const fade = 1 - d / R;
+      this.statsCtx.globalCompositeOperation = 'lighter';
+      this.statsCtx.fillStyle = `rgba(255,255,255,${(0.16 * fade).toFixed(3)})`;
+      this.statsCtx.beginPath();
+      this.statsCtx.arc(px, py, (Math.random() * 3.4 + 1.4) * scaleX, 0, Math.PI * 2);
+      this.statsCtx.fill();
+    }
+    this.statsCtx.globalCompositeOperation = 'source-over';
+  }
+
+  _compose() {
+    if (this._liftPhase !== 'rubbing') return;
+    if (!this._dirty || !this.rubCtx || !this._w || !this._h) return;
+    this._dirty = false;
+
+    this.rubCtx.clearRect(0, 0, this._w, this._h);
+    this.rubCtx.drawImage(this.maskCv, 0, 0);
+    this.rubCtx.globalCompositeOperation = 'source-in';
+    this.rubCtx.drawImage(this.artCv, 0, 0);
+    this.rubCtx.globalCompositeOperation = 'source-over';
+  }
+
+  _renderRubbing(ctx) {
+    if (this.dimLayer?.complete && this.dimLayer.naturalWidth) {
+      ctx.filter = 'brightness(0.3)';
+      ctx.drawImage(this.dimLayer, 0, 0, this._w, this._h);
+      ctx.filter = 'none';
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(this.rubCv, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  _renderLift(ctx, liftT) {
+    if (liftT < 1 && this.dimLayer?.complete && this.dimLayer.naturalWidth) {
+      ctx.save();
+      ctx.globalAlpha = 1 - liftT;
+      ctx.filter = 'brightness(0.3)';
+      ctx.drawImage(this.dimLayer, 0, 0, this._w, this._h);
+      ctx.filter = 'none';
+      ctx.restore();
+    }
+
+    if (liftT > 0) {
+      const inset = 18 * (1 - liftT);
+      ctx.save();
+      ctx.globalAlpha = liftT;
+      ctx.fillStyle = RICE_PAPER;
+      ctx.fillRect(inset, inset, this._w - inset * 2, this._h - inset * 2);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(0, -liftT * 26);
+
+    if (liftT < 1) {
+      ctx.save();
+      ctx.globalAlpha = 1 - liftT;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(this.rubCv, 0, 0);
+      ctx.restore();
+    }
+
+    ctx.globalAlpha = liftT;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.filter = 'invert(1) sepia(.5) saturate(2)';
+    ctx.drawImage(this.rubCv, 0, 0);
+    ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  _render() {
+    if (!this.displayCtx || !this._w || !this._h) return;
+
+    this._updateLiftAnim();
+    this._compose();
+
+    const ctx = this.displayCtx;
+    ctx.clearRect(0, 0, this._w, this._h);
+
+    if (this._liftPhase === 'rubbing' && this._liftT === 0) {
+      this._renderRubbing(ctx);
+      return;
+    }
+
+    const liftT = this._liftPhase === 'lifted' ? 1 : this._liftT;
+    this._renderLift(ctx, liftT);
+  }
+
+  _computeProgress() {
+    if (this._liftPhase !== 'rubbing') return;
+    if (!this.statsCtx || !this._statW || !this._statH) return;
+
+    const data = this.statsCtx.getImageData(0, 0, this._statW, this._statH).data;
+    let sampled = 0;
+    let hit = 0;
+
+    for (let y = 0; y < this._statH; y += 4) {
+      for (let x = 0; x < this._statW; x += 4) {
+        const alpha = data[(y * this._statW + x) * 4 + 3];
+        sampled++;
+        if (alpha > 50) hit++;
+      }
+    }
+
+    this._progress = sampled ? (hit / sampled) * 100 : 0;
+    this._updateProgressUI();
+  }
+
+  _startLoop() {
+    if (this._raf) return;
+    const tick = () => {
+      if (!this.active) {
+        this._raf = null;
+        return;
+      }
+      this._render();
+      this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
+
+  _stopLoop() {
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
+  }
+}
+
+/** 供 PatternSection 预载后预热染金缓存 */
+export function warmGoldLineartCache(src, img) {
+  return getOrBuildGoldCache(src, img);
 }

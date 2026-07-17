@@ -33,6 +33,25 @@ const RING_R = 96, RING_C = 2 * Math.PI * RING_R;
 const PET_N = 24, PET_R = 150;      // 24组云雷纹，更密
 const TAOTIE = 132;
 
+/** 清除残留青铜门 DOM / 失活实例，不碰正在工作的门 */
+export function purgeStaleBronzeGates() {
+  const gate = window.__bronzeGate;
+  const activeRoot = gate?.root;
+
+  // 【1】只清 DOM 残留：跳过正在推开的门与当前实例的 root
+  document.querySelectorAll('.bronze-gate').forEach((el) => {
+    if (el === activeRoot) return;
+    if (!el.classList.contains('is-opening')) el.remove();
+  });
+
+  // 【2】失活实例（root 已不在 DOM）才 destroy；仍在 DOM 的蓄力/预载门不动
+  if (gate && !gate._destroyed && !activeRoot?.isConnected) {
+    if (!activeRoot?.classList.contains('is-opening')) {
+      gate.destroy();
+    }
+  }
+}
+
 export class BronzeDoorGate {
   constructor({
     container = document.body,
@@ -44,6 +63,8 @@ export class BronzeDoorGate {
     Object.assign(this, { container, doorLeft, doorRight, taotieSrc, chargeMs, onOpen });
     this.t = 0; this.holding = false; this.done = false; this.raf = null;
     this._destroyed = false;
+    this._lastLit = -1;
+    this._lastGlowStep = -1;
     this._onLeafTransitionEnd = null;
     this._onDown = this._onDown.bind(this);
     this._onUp = this._onUp.bind(this);
@@ -51,6 +72,9 @@ export class BronzeDoorGate {
   }
 
   mount() {
+    const preload = new Image();
+    preload.src = this.taotieSrc;
+
     const usePng = !!(this.doorLeft && this.doorRight);
     this.root = document.createElement('div');
     this.root.className = 'bronze-gate' + (usePng ? ' bronze-gate--png' : '');
@@ -69,14 +93,16 @@ export class BronzeDoorGate {
     this.seam = this.root.querySelector('.gate-seam');
     this.hintEl = this.root.querySelector('.gate-hint');
     this.flash = this.root.querySelector('.gate-flash');
+    this.seam.style.width = '12px';
 
     this.root.appendChild(this._buildUi());
     this.container.appendChild(this.root);
+    window.__bronzeGate = this;
 
-    this.knob.addEventListener('pointerdown', this._onDown);
+    this.root.addEventListener('pointerdown', this._onDown);
     window.addEventListener('pointerup', this._onUp);
-    this.knob.addEventListener('pointerleave', this._onUp);
     this._paint();
+    console.log('[Gate] mounted, knob=', this.knob);
   }
 
   /* ---------- 中央UI：固定 480×480，永不缩放 ---------- */
@@ -86,6 +112,7 @@ export class BronzeDoorGate {
       viewBox: '0 0 ' + S + ' ' + S,
       width: S, height: S,          // 固定像素，不随屏幕变
       xmlns: NS,
+      style: 'pointer-events:auto',
     });
 
     // 云雷纹一圈（24组，密而规整）
@@ -142,15 +169,15 @@ export class BronzeDoorGate {
     this.taotie = this._el('image', {
       x: C - TAOTIE / 2, y: C - TAOTIE / 2,
       width: TAOTIE, height: TAOTIE,
-      opacity: 0.6, style: 'pointer-events:none',
+      opacity: 0.55, style: 'pointer-events:none',
     });
     this.taotie.setAttribute('href', this.taotieSrc);
     this.taotie.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', this.taotieSrc);
     svg.appendChild(this.taotie);
 
-    // 命中层（最上）
+    // 命中层（最上，扩大中央可点区域）
     this.knob = this._el('circle', {
-      cx: C, cy: C, r: RING_R, fill: 'transparent', style: 'cursor:pointer',
+      cx: C, cy: C, r: 170, fill: 'transparent', style: 'cursor:pointer',
     });
     svg.appendChild(this.knob);
 
@@ -159,6 +186,7 @@ export class BronzeDoorGate {
 
   /* ---------- 交互 ---------- */
   _onDown(e) {
+    console.log('[Gate] pointerdown 触发了！done=', this.done, 'raf=', this.raf);
     if (this.done) return;
     e.preventDefault();
     this.holding = true;
@@ -173,6 +201,7 @@ export class BronzeDoorGate {
   _loop() {
     const up = 16.7 / this.chargeMs;
     this.t = this.holding ? Math.min(1, this.t + up) : Math.max(0, this.t - up * 3);
+    if (Math.random() < 0.05) console.log('[Gate] loop t=', this.t.toFixed(2), 'holding=', this.holding);
     this._paint();
     if (this.t >= 1 && !this.done) { this.done = true; this._open(); }
     this.raf = (this.t > 0 || this.holding) ? requestAnimationFrame(this._loop) : null;
@@ -184,23 +213,28 @@ export class BronzeDoorGate {
     this.prog.setAttribute('stroke-dashoffset', (RING_C * (1 - t)).toFixed(1));
     this.prog.setAttribute('stroke', t >= 1 ? GOLD_HI : GOLD_BRIGHT);
 
-    // 云雷纹逐组点亮
     const lit = Math.floor(t * PET_N + 0.001);
-    this.pets.forEach(function (o, i) {
-      const on = i < lit;
-      o.g.setAttribute('opacity', on ? 0.95 : 0.14);
-      o.p.setAttribute('stroke', on ? GOLD_BRIGHT : PAT_OFF);
-    });
+    if (lit !== this._lastLit) {
+      this._lastLit = lit;
+      this.pets.forEach(function (o, i) {
+        const on = i < lit;
+        o.g.setAttribute('opacity', on ? 0.95 : 0.14);
+        o.p.setAttribute('stroke', on ? GOLD_BRIGHT : PAT_OFF);
+      });
+    }
 
-    // 门缝光渐强变宽
-    this.seam.style.opacity = 0.2 + t * 0.8;
-    this.seam.style.width = (3 + t * 9) + 'px';
+    this.seam.style.opacity = (0.2 + t * 0.8).toFixed(2);
+    this.seam.style.transform =
+      'translateX(-50%) scaleX(' + ((3 + t * 9) / 12).toFixed(3) + ')';
 
-    // 兽面醒来
-    this.taotie.setAttribute('opacity', (0.6 + t * 0.4).toFixed(2));
-    this.taotie.style.filter =
-      'brightness(' + (0.85 + t * 0.55).toFixed(2) + ') ' +
-      'drop-shadow(0 0 ' + (t * 14).toFixed(1) + 'px rgba(232,203,106,' + (t * 0.9).toFixed(2) + '))';
+    const step = Math.round(t * 5);
+    if (step !== this._lastGlowStep) {
+      this._lastGlowStep = step;
+      this.taotie.style.filter =
+        'brightness(' + (0.85 + step * 0.11).toFixed(2) + ') ' +
+        'drop-shadow(0 0 ' + (step * 2.8).toFixed(1) + 'px rgba(232,203,106,' + (step * 0.18).toFixed(2) + '))';
+    }
+    this.taotie.setAttribute('opacity', (0.55 + t * 0.45).toFixed(2));
   }
 
   /* ---------- 蓄满：门后先切版块 → 爆光 → 推开 → 自毁 ---------- */
@@ -236,18 +270,19 @@ export class BronzeDoorGate {
       this._onLeafTransitionEnd = null;
     }
     if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
-    if (this.knob) {
-      this.knob.removeEventListener('pointerdown', this._onDown);
-      this.knob.removeEventListener('pointerleave', this._onUp);
-    }
+    this._lastLit = -1;
+    this._lastGlowStep = -1;
+    this.root?.removeEventListener('pointerdown', this._onDown);
     window.removeEventListener('pointerup', this._onUp);
 
-    if (this.root) {
-      if (this.root.parentNode) this.root.parentNode.removeChild(this.root);
-      this.root = null;
+    if (this.root?.parentNode) {
+      this.root.parentNode.removeChild(this.root);
     }
-    // 强制清掉 body 上可能残留的 .bronze-gate（实例引用丢失时兜底）
-    document.body.querySelectorAll('.bronze-gate').forEach(function (el) { el.remove(); });
+    this.root = null;
+
+    if (window.__bronzeGate === this) {
+      window.__bronzeGate = null;
+    }
   }
 
   _el(tag, attrs) {
