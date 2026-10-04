@@ -377,7 +377,7 @@ export class AtlasSection {
         this.ui.interactionHint.textContent +=
           ' （摄像头未授权，仍可用鼠标预览交互）';
       }
-      if (!this.ui.touchMode) this.ui.showCameraPrompt();
+      if (!this.ui.touchMode) this.ui.showCameraPrompt(err?.code);
     }
   }
 

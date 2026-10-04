@@ -213,7 +213,7 @@ export class PatternSection {
         this.ui.interactionHint.textContent +=
           ' （摄像头未授权，移动鼠标预览照亮）';
       }
-      if (!this.ui.touchMode) this.ui.showCameraPrompt();
+      if (!this.ui.touchMode) this.ui.showCameraPrompt(err?.code);
     }
   }
 

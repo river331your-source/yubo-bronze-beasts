@@ -386,8 +386,18 @@ export class UIController {
     this.materialTimeline.hidden = !show;
   }
 
-  showCameraPrompt() {
+  showCameraPrompt(code) {
     if (this.cameraPrompt) this.cameraPrompt.hidden = false;
+    const hint = document.getElementById('camera-prompt-hint');
+    if (hint) {
+      if (code === 'CAMERA_DENIED') {
+        hint.hidden = false;
+        hint.textContent = '浏览器已记住“拒绝”：请点击地址栏左侧的摄像头图标，改为“允许”，然后刷新页面重试。';
+      } else {
+        hint.hidden = true;
+        hint.textContent = '';
+      }
+    }
   }
 
   hideCameraPrompt() {

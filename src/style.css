@@ -81,6 +81,8 @@ body {
 .camera-prompt-card h2 { color: var(--jijin); font-size: 16px; letter-spacing: .2em; margin: 0 0 8px; }
 .camera-prompt-card p { color: var(--patina); font-size: 13px; margin: 0 0 16px; }
 .camera-prompt-actions { display: flex; flex-direction: column; gap: 10px; }
+.camera-prompt-hint { color: #e8cb6a; font-size: 12px; line-height: 1.6; margin: 0 0 12px; }
+.camera-prompt-hint[hidden] { display: none; }
 .camera-btn { border: 1px solid rgba(201,168,76,.5); background: transparent; color: var(--jijin); border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; }
 .camera-btn--primary { background: var(--jijin); color: #0a0d0a; font-weight: 600; }
 
