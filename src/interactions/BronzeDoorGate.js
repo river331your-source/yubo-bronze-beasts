@@ -44,18 +44,33 @@ const RING_R = 96, RING_C = 2 * Math.PI * RING_R;
 const PET_N = 24, PET_R = 150;      // 24组云雷纹，更密
 const TAOTIE = 132;
 
+/** 蓄满后：90ms 爆光延迟 + 2s 推门 + 余量 ≈ 2600ms */
+const OPEN_DESTROY_FALLBACK_MS = 2600;
+
+/** 清除 document 中不属于当前活跃实例的青铜门 DOM */
+export function purgeOrphanBronzeGateDom() {
+  const activeRoot = window.__bronzeGate?.root ?? null;
+
+  document.querySelectorAll('.bronze-gate').forEach((el) => {
+    if (el === activeRoot) return;
+    el.remove();
+  });
+
+  document.querySelectorAll('.gate-seam, .gate-flash').forEach((el) => {
+    if (!el.isConnected) return;
+    if (el.closest('.bronze-gate')) return;
+    el.remove();
+  });
+}
+
 /** 清除残留青铜门 DOM / 失活实例，不碰正在工作的门 */
 export function purgeStaleBronzeGates() {
   const gate = window.__bronzeGate;
   const activeRoot = gate?.root;
 
-  // 【1】只清 DOM 残留：跳过正在推开的门与当前实例的 root
-  document.querySelectorAll('.bronze-gate').forEach((el) => {
-    if (el === activeRoot) return;
-    if (!el.classList.contains('is-opening')) el.remove();
-  });
+  purgeOrphanBronzeGateDom();
 
-  // 【2】失活实例（root 已不在 DOM）才 destroy；仍在 DOM 的蓄力/预载门不动
+  // 失活实例（root 已不在 DOM）才 destroy；仍在 DOM 的蓄力/预载/推门门不动
   if (gate && !gate._destroyed && !activeRoot?.isConnected) {
     if (!activeRoot?.classList.contains('is-opening')) {
       gate.destroy();
@@ -70,14 +85,16 @@ export class BronzeDoorGate {
     taotieSrc = DEFAULT_TAOTIE_SRC,
     chargeMs = 1800,
     onOpen,
+    onDestroy,
   } = {}) {
-    Object.assign(this, { container, doorLeft, doorRight, taotieSrc, chargeMs, onOpen });
+    Object.assign(this, { container, doorLeft, doorRight, taotieSrc, chargeMs, onOpen, onDestroy });
     this.t = 0; this.holding = false; this.done = false; this.raf = null;
     this._destroyed = false;
     this._hidden = false;
     this._lastLit = -1;
     this._lastGlowStep = -1;
     this._onLeafTransitionEnd = null;
+    this._openDestroyArmed = false;
     this._onDown = this._onDown.bind(this);
     this._onUp = this._onUp.bind(this);
     this._loop = this._loop.bind(this);
@@ -112,6 +129,7 @@ export class BronzeDoorGate {
     this.hintEl = this.root.querySelector('.gate-hint');
     this.flash = this.root.querySelector('.gate-flash');
     this.seam.style.width = '12px';
+    this._ensureOverlayLayersInert();
 
     this.root.appendChild(this._uiSvg);
     this.container.appendChild(this.root);
@@ -197,9 +215,10 @@ export class BronzeDoorGate {
 
     // 中央兽面（真实纹样图）
     this.taotie = this._el('image', {
+      class: 'gate-taotie glow-0',
       x: C - TAOTIE / 2, y: C - TAOTIE / 2,
       width: TAOTIE, height: TAOTIE,
-      opacity: 0.55, style: 'pointer-events:none',
+      opacity: 0.55,
     });
     this.taotie.setAttribute('href', this.taotieSrc);
     this.taotie.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', this.taotieSrc);
@@ -225,15 +244,29 @@ export class BronzeDoorGate {
 
   _onUp() {
     this.holding = false;
+    if (this.done) return;
     if (!this.raf && this.t > 0) this.raf = requestAnimationFrame(this._loop);
   }
 
   _loop() {
+    if (this.done) {
+      this.raf = null;
+      return;
+    }
+
     const up = 16.7 / this.chargeMs;
     this.t = this.holding ? Math.min(1, this.t + up) : Math.max(0, this.t - up * 3);
     if (Math.random() < 0.05) console.log('[Gate] loop t=', this.t.toFixed(2), 'holding=', this.holding);
     this._paint();
-    if (this.t >= 1 && !this.done) { this.done = true; this._open(); }
+    if (this.t >= 1 && !this.done) {
+      this.done = true;
+      if (this.raf != null) {
+        cancelAnimationFrame(this.raf);
+        this.raf = null;
+      }
+      this._open();
+      return;
+    }
     this.raf = (this.t > 0 || this.holding) ? requestAnimationFrame(this._loop) : null;
   }
 
@@ -260,59 +293,125 @@ export class BronzeDoorGate {
     const step = Math.round(t * 5);
     if (step !== this._lastGlowStep) {
       this._lastGlowStep = step;
-      this.taotie.style.filter =
-        'brightness(' + (0.85 + step * 0.11).toFixed(2) + ') ' +
-        'drop-shadow(0 0 ' + (step * 2.8).toFixed(1) + 'px rgba(232,203,106,' + (step * 0.18).toFixed(2) + '))';
+      this.taotie.setAttribute('class', 'gate-taotie glow-' + step);
     }
     this.taotie.setAttribute('opacity', (0.55 + t * 0.45).toFixed(2));
   }
 
   /* ---------- 蓄满：门后先切版块 → 爆光 → 推开 → 自毁 ---------- */
   _open() {
-    const self = this;
     this.hintEl.style.opacity = '0';
 
     // 关键：门还关着时先切版块，推开后露出的直接是展厅
     if (this.onOpen) this.onOpen();
 
+    this._prepareOpenOverlaysForExit();
     this.root.classList.add('is-flash');
-    setTimeout(function () { self.root.classList.add('is-opening'); }, 90);
+    setTimeout(() => {
+      if (this._destroyed) return;
+      this.root?.classList.add('is-opening');
+    }, 90);
 
-    const leaf = this.leafR;
-    this._onLeafTransitionEnd = function onEnd(e) {
-      if (e && e.propertyName !== 'transform') return;
-      leaf.removeEventListener('transitionend', onEnd);
-      self._onLeafTransitionEnd = null;
-      self.destroy();
+    this._armDestroyAfterOpen();
+  }
+
+  /** 推门阶段：清掉蓄力 inline 样式，避免 seam 内联 opacity 压过 CSS 隐藏规则 */
+  _prepareOpenOverlaysForExit() {
+    if (this.seam) {
+      this.seam.style.opacity = '0';
+      this.seam.style.transform = '';
+      this.seam.style.pointerEvents = 'none';
+    }
+    if (this.flash) {
+      this.flash.style.pointerEvents = 'none';
+    }
+  }
+
+  _ensureOverlayLayersInert() {
+    if (this.seam) this.seam.style.pointerEvents = 'none';
+    if (this.flash) this.flash.style.pointerEvents = 'none';
+  }
+
+  _armDestroyAfterOpen() {
+    this._openDestroyArmed = true;
+
+    this._onLeafTransitionEnd = (e) => {
+      if (!this._openDestroyArmed || this._destroyed) return;
+      if (!e || e.propertyName !== 'transform') return;
+      if (e.target !== this.leafL && e.target !== this.leafR) return;
+      this._openDestroyArmed = false;
+      this.destroy();
     };
-    leaf.addEventListener('transitionend', this._onLeafTransitionEnd);
-    // 兜底：transitionend 未触发时仍清理
-    this._closeTimer = setTimeout(function () { self.destroy(); }, 3000);
+
+    this.leafL?.addEventListener('transitionend', this._onLeafTransitionEnd);
+    this.leafR?.addEventListener('transitionend', this._onLeafTransitionEnd);
+
+    this._closeTimer = window.setTimeout(() => {
+      if (!this._openDestroyArmed || this._destroyed) return;
+      this._openDestroyArmed = false;
+      this.destroy();
+    }, OPEN_DESTROY_FALLBACK_MS);
+  }
+
+  _detachOpenCompletionListeners() {
+    this._openDestroyArmed = false;
+    if (this._onLeafTransitionEnd) {
+      this.leafL?.removeEventListener('transitionend', this._onLeafTransitionEnd);
+      this.leafR?.removeEventListener('transitionend', this._onLeafTransitionEnd);
+      this._onLeafTransitionEnd = null;
+    }
+    if (this._closeTimer != null) {
+      clearTimeout(this._closeTimer);
+      this._closeTimer = null;
+    }
+  }
+
+  _removeGateDom() {
+    const root = this.root;
+    if (!root) return;
+
+    root.removeEventListener('pointerdown', this._onDown);
+
+    // 显式移除光效层，再删 root，避免个别环境下子树残留
+    this.seam?.remove();
+    this.flash?.remove();
+    this.seam = null;
+    this.flash = null;
+
+    if (root.isConnected) {
+      root.remove();
+    }
+    this.root = null;
+    this.leafL = null;
+    this.leafR = null;
+    this.hintEl = null;
   }
 
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;
 
-    if (this._closeTimer) { clearTimeout(this._closeTimer); this._closeTimer = null; }
-    if (this.leafR && this._onLeafTransitionEnd) {
-      this.leafR.removeEventListener('transitionend', this._onLeafTransitionEnd);
-      this._onLeafTransitionEnd = null;
+    this._detachOpenCompletionListeners();
+
+    if (this.raf != null) {
+      cancelAnimationFrame(this.raf);
+      this.raf = null;
     }
-    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
     this._lastLit = -1;
     this._lastGlowStep = -1;
-    this.root?.removeEventListener('pointerdown', this._onDown);
     window.removeEventListener('pointerup', this._onUp);
 
-    if (this.root?.parentNode) {
-      this.root.parentNode.removeChild(this.root);
-    }
-    this.root = null;
+    this._removeGateDom();
 
     if (window.__bronzeGate === this) {
       window.__bronzeGate = null;
     }
+
+    if (this.onDestroy) this.onDestroy();
+
+    requestAnimationFrame(() => {
+      purgeOrphanBronzeGateDom();
+    });
   }
 
   _el(tag, attrs) {

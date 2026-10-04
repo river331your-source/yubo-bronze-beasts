@@ -48,6 +48,22 @@ export class UIController {
     this.gestureStatus = document.getElementById('gesture-status');
     this.gestureDot = document.querySelector('.gesture-dot');
     this.clapFlash = document.getElementById('clap-flash');
+    this.cameraPrompt = document.getElementById('camera-prompt');
+    this.cameraRetryBtn = document.getElementById('camera-retry-btn');
+    this.cameraTouchBtn = document.getElementById('camera-touch-btn');
+    this.orientationGate = document.getElementById('orientation-gate');
+    this.onCameraRetry = null;
+    this.onCameraTouchMode = null;
+    this.touchMode = false;
+    this.cameraRetryBtn?.addEventListener('click', () => {
+      this.hideCameraPrompt();
+      this.onCameraRetry?.();
+    });
+    this.cameraTouchBtn?.addEventListener('click', () => {
+      this.touchMode = true;
+      this.hideCameraPrompt();
+      this.onCameraTouchMode?.();
+    });
 
     this.currentMode = 'deconstruct';
     this.currentArtifactIndex = DEFAULT_ARTIFACT_INDEX;
@@ -368,6 +384,18 @@ export class UIController {
 
   showMaterialTimeline(show) {
     this.materialTimeline.hidden = !show;
+  }
+
+  showCameraPrompt() {
+    if (this.cameraPrompt) this.cameraPrompt.hidden = false;
+  }
+
+  hideCameraPrompt() {
+    if (this.cameraPrompt) this.cameraPrompt.hidden = true;
+  }
+
+  setOrientationGate(show) {
+    if (this.orientationGate) this.orientationGate.hidden = !show;
   }
 
   updateMaterialRestoreUI(factor) {

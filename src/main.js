@@ -1,6 +1,8 @@
 import './style.css';
 import { performanceMonitor } from './debug/PerformanceMonitor.js';
 import { stopMainLoop } from './core/FrameLoop.js';
+import { isPortraitPhone } from './utils/deviceProfile.js';
+import { flushDeferredHeavyInit } from './utils/heavyInitGate.js';
 import { UIController } from './ui/UIController.js';
 import { AppRouter } from './core/AppRouter.js';
 import { HomeSection } from './sections/HomeSection.js';
@@ -58,6 +60,12 @@ class App {
     this.ui.onNavSelect = (id) => this.router.switchSection(id);
     this.ui.onArtifactSelect = (index) => this.router.loadArtifact(index);
     this.ui.onModeChange = (mode) => this.router.switchMode(mode);
+    this.ui.onCameraRetry = () => {
+      const s = this.router.currentSection;
+      if (s === 'atlas') this.router.sections.atlas?._initGestureAsync?.();
+      else if (s === 'pattern') this.router.sections.pattern?._initGestureAsync?.();
+    };
+    this._bindOrientationGate();
 
     // 每次刷新/冷启动一律从首页入场（青铜门仪式），不按 hash 直达展厅
     if (location.hash) {
@@ -74,6 +82,17 @@ class App {
       this.router.switchSection(id);
     }
   };
+
+  _bindOrientationGate() {
+    const update = () => {
+      const portrait = isPortraitPhone();
+      this.ui.setOrientationGate(portrait);
+      if (!portrait) flushDeferredHeavyInit('landscape');
+    };
+    update();
+    window.addEventListener('orientationchange', () => setTimeout(update, 120));
+    window.addEventListener('resize', update);
+  }
 
   destroy() {
     window.removeEventListener('hashchange', this._onHashChange);

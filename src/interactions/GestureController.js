@@ -1,12 +1,19 @@
 import { damp } from '../scene/PointCloudCastModel.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
 import { createHandLandmarker } from './mediapipeVision.js';
+import { getDeviceProfile } from '../utils/deviceProfile.js';
 
 /** 指尖→掌心距离归一化后：低于此为"弯"，高于此为"伸" */
 const FINGER_CURLED = 0.4;
 
-/** MediaPipe 检测降频：每 N 帧跑一次 detectForVideo（1 = 每帧检测） */
-const MEDIAPIPE_DETECT_INTERVAL = 1;
+/** MediaPipe 检测降频：桌面每帧，手机每2帧，低性能每3帧（运行时按设备复写） */
+let MEDIAPIPE_DETECT_INTERVAL = 1;
+try {
+  MEDIAPIPE_DETECT_INTERVAL = getDeviceProfile().detectInterval;
+} catch { /* 保持默认 1 */ }
+export function getDetectInterval() {
+  return MEDIAPIPE_DETECT_INTERVAL;
+}
 const FINGER_EXTENDED = 0.56;
 
 /** 拍手判定：掌心距阈值 + 合拢速度 + 冷却（防连击） */
@@ -181,9 +188,30 @@ export class GestureController {
   }
 
   async _startCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 },
-    });
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const err = new Error('CAMERA_UNSUPPORTED');
+      err.code = 'CAMERA_UNSUPPORTED';
+      throw err;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+    } catch (err) {
+      const name = err?.name ?? '';
+      err.code =
+        name === 'NotAllowedError' || name === 'SecurityError'
+          ? 'CAMERA_DENIED'
+          : name === 'NotFoundError' || name === 'OverconstrainedError'
+            ? 'CAMERA_ABSENT'
+            : name === 'NotReadableError' || name === 'AbortError'
+              ? 'CAMERA_BUSY'
+              : 'CAMERA_FAILED';
+      console.warn('[GestureController] 摄像头启动失败:', name, err?.message ?? err);
+      throw err;
+    }
     this.videoEl.srcObject = stream;
     await this.videoEl.play();
   }

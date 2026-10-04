@@ -3,6 +3,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { ARTIFACTS, MODEL_ASSET_REVISION } from '../data/artifacts.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
+
+function getMaxPixelRatio() {
+  try {
+    const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+    const mobileUA = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+    if (coarse || mobileUA) return 1.5;
+  } catch (e) { /* default */ }
+  return 2;
+}
 import {
   getMainLoopOwner,
   isMainLoopRunning,
@@ -163,7 +172,7 @@ export class SceneManager {
       alpha: false,
     });
     this.renderer.setClearColor(0x0a0d0a, 1);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, getMaxPixelRatio()));
     this.renderer.setSize(width, height, false);
     // PBR 色彩管理：sRGB 输出 + ACES 色调映射，金属高光与色彩更准确
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;

@@ -99,6 +99,29 @@
   pointer-events: auto;
 }
 
+/* 兽面光晕：六档固定 filter，避免蓄力时逐帧重建 filter 字符串 */
+.bronze-gate .gate-taotie {
+  pointer-events: none;
+}
+.bronze-gate .gate-taotie.glow-0 {
+  filter: brightness(0.85) drop-shadow(0 0 0px rgba(232, 203, 106, 0));
+}
+.bronze-gate .gate-taotie.glow-1 {
+  filter: brightness(0.96) drop-shadow(0 0 2.8px rgba(232, 203, 106, 0.18));
+}
+.bronze-gate .gate-taotie.glow-2 {
+  filter: brightness(1.07) drop-shadow(0 0 5.6px rgba(232, 203, 106, 0.36));
+}
+.bronze-gate .gate-taotie.glow-3 {
+  filter: brightness(1.18) drop-shadow(0 0 8.4px rgba(232, 203, 106, 0.54));
+}
+.bronze-gate .gate-taotie.glow-4 {
+  filter: brightness(1.29) drop-shadow(0 0 11.2px rgba(232, 203, 106, 0.72));
+}
+.bronze-gate .gate-taotie.glow-5 {
+  filter: brightness(1.4) drop-shadow(0 0 14px rgba(232, 203, 106, 0.9));
+}
+
 /* ---------- 提示 ---------- */
 .bronze-gate .gate-hint {
   position: absolute;

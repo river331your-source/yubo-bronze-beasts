@@ -5,13 +5,14 @@ import {
   preloadTaotieGold,
   purgeStaleBronzeGates,
 } from '../interactions/BronzeDoorGate.js';
+import { shouldDeferHeavyInit } from '../utils/heavyInitGate.js';
 
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
  *
- * 开门时序（v3）：
- *   点按钮 → 显示预热门 → 立刻在门后预加载 atlas（与蓄力并行）
- *   → 蓄满 → onOpen 确保渲染 → 推门 → 门自毁
+ * 开门时序（v4）：
+ *   点按钮 → enterBehindGate → 门后预载 atlas（静态帧，无主循环）
+ *   → 蓄力（仅门 RAF）→ 蓄满 activateAfterGate → 推门 → 门销毁 → startGestureAfterGate
  */
 export class HomeSection {
   constructor({ enterBtn }) {
@@ -28,10 +29,12 @@ export class HomeSection {
   }
 
   _createGate() {
+    const atlas = this.router?.sections?.atlas;
     return new BronzeDoorGate({
       taotieSrc: '/images/taotie-gold.png',
       chargeMs: 1800,
-      onOpen: () => this.router?.sections?.atlas?.ensureRendering?.(),
+      onOpen: () => atlas?.activateAfterGate?.(),
+      onDestroy: () => atlas?.startGestureAfterGate?.(),
     });
   }
 
@@ -44,6 +47,10 @@ export class HomeSection {
 
   _handleEnterClick() {
     if (this.gate || this._gateTransitioning || !this.enterBtn) return;
+    if (shouldDeferHeavyInit()) {
+      console.log('[HomeSection] 竖屏中 — 进入展厅已延迟，请先横屏');
+      return;
+    }
 
     this._setEnterBtnLoading(true);
     this._gateTransitioning = true;
@@ -62,12 +69,14 @@ export class HomeSection {
   }
 
   async _prepareAtlasBehindGate() {
+    const atlas = this.router?.sections?.atlas;
     try {
+      atlas?.enterBehindGate?.();
       await this.router.switchSection('atlas');
-      await this.router.sections.atlas.whenReady();
-      this.router.sections.atlas.ensureRendering?.();
+      await atlas?.whenReady();
     } catch (err) {
       console.error('[HomeSection] atlas preload failed:', err);
+      atlas?.cancelBehindGate?.();
       this._setEnterBtnLoading(false);
       this._gateTransitioning = false;
       this.gate?.destroy();
