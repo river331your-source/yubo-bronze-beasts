@@ -68,6 +68,7 @@ export class UIController {
     this.cameraTouchBtn?.addEventListener('click', () => {
       this.touchMode = true;
       this.hideCameraPrompt();
+      this.setTouchBar(true);
       this.onCameraTouchMode?.();
     });
 
@@ -414,18 +415,22 @@ export class UIController {
     if (this.orientationGate) this.orientationGate.hidden = !show;
   }
 
-  /** 触控备用条：手机端或摄像头不可用时显示，手势正常时隐藏 */
+  /** 触控备用条：手势优先、触控兜底。
+   * 隐藏：MediaPipe正常且用户未主动启用触控模式；
+   * 显示：用户点“使用触控模式”、摄像头/手势失败、手机端无手势。 */
   setTouchBar(show) {
     if (this.touchBar) this.touchBar.hidden = !show;
   }
 
-  shouldShowTouchBar(gestureActive) {
-    if (gestureActive && !this.touchMode) return false;
+  shouldShowTouchBar(gestureActive, cameraFailed = false) {
+    if (this.touchMode) return true;
+    if (gestureActive) return false;
+    if (cameraFailed) return true;
     try {
       if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
     } catch (e) { /* ignore */ }
     if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '')) return true;
-    return this.touchMode;
+    return false;
   }
 
   updateMaterialRestoreUI(factor) {

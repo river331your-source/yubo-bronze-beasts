@@ -381,7 +381,7 @@ export class AtlasSection {
           ' （摄像头未授权，仍可用鼠标预览交互）';
       }
       if (!this.ui.touchMode) this.ui.showCameraPrompt(err?.code);
-      this.ui.setTouchBar(this.ui.shouldShowTouchBar(false));
+      this.ui.setTouchBar(this.ui.shouldShowTouchBar(false, true));
     }
   }
 
