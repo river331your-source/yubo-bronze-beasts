@@ -361,8 +361,13 @@ export class SceneManager {
     });
   }
 
-  /** 当前文物就绪后，空闲预加载列表中的下一件 */
+  /** 当前文物就绪后，空闲预加载列表中的下一件（移动端跳过，仅桌面） */
   _schedulePreloadNext(fromIndex) {
+    try {
+      const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+      const mobileUA = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+      if (coarse || mobileUA) return;
+    } catch (e) { /* 默认走桌面逻辑 */ }
     const nextIndex = (fromIndex + 1) % this.artifacts.length;
     const nextArtifact = this.artifacts[nextIndex];
     if (this.loadedModels.has(nextArtifact.id)) return;

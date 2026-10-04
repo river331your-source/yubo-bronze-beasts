@@ -208,6 +208,7 @@ export class AtlasSection {
     this._logRafState(visitN, gateMode ? '门后预载就绪（静态帧）' : '图鉴就绪');
 
     if (!this.deferGesture) {
+      this.ui.setTouchBar(this.ui.shouldShowTouchBar(false));
       this._initGestureAsync();
     }
 
@@ -261,6 +262,7 @@ export class AtlasSection {
   onLeave() {
     if (!this.active) return;
     this.active = false;
+    this.ui.setTouchBar(false);
     this.behindGate = false;
     this.deferGesture = false;
     this._enterGen += 1;
@@ -347,6 +349,7 @@ export class AtlasSection {
 
       this.gestureController = gc;
       this.ui.showGestureUI(true);
+      this.ui.setTouchBar(this.ui.shouldShowTouchBar(true));
 
       gc.onGestureChange = (gesture) => {
         this.ui.updateGestureLabel(gesture);
@@ -378,11 +381,28 @@ export class AtlasSection {
           ' （摄像头未授权，仍可用鼠标预览交互）';
       }
       if (!this.ui.touchMode) this.ui.showCameraPrompt(err?.code);
+      this.ui.setTouchBar(this.ui.shouldShowTouchBar(false));
     }
   }
 
   _handleGesture(gesture) {
     this.interactions[this.currentMode]?.onGesture?.(gesture);
+  }
+
+  /** 触控备用：复用现有粒子状态，不另建粒子系统 */
+  _touchSetStates(deconstruct, dissolve) {
+    const pc = this.sceneManager?.pointCloud;
+    if (!pc) return;
+    pc.setDeconstructState(deconstruct);
+    pc.setDissolveState(dissolve);
+  }
+
+  handleTouchAction(action) {
+    if (!this.active) return;
+    if (action === 'gather') this._touchSetStates('solid', 0);
+    else if (action === 'deconstruct') this._touchSetStates(1, 0);
+    else if (action === 'dissolve') this._touchSetStates(1, 1);
+    else if (action === 'next') this._onClapSwitchArtifact();
   }
 
   /** 拍手 → 顺序切换下一件文物（循环） */

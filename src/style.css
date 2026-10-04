@@ -83,6 +83,11 @@ body {
 .camera-prompt-actions { display: flex; flex-direction: column; gap: 10px; }
 .camera-prompt-hint { color: #e8cb6a; font-size: 12px; line-height: 1.6; margin: 0 0 12px; }
 .camera-prompt-hint[hidden] { display: none; }
+/* 触控备用条：仅手机端或摄像头不可用时显示 */
+.touch-bar { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 8px; }
+.touch-bar[hidden] { display: none; }
+.touch-bar button { border: 1px solid rgba(201,168,76,.5); background: rgba(7,10,8,.8); color: var(--jijin); border-radius: 8px; padding: 8px 12px; font-size: 13px; letter-spacing: .1em; cursor: pointer; }
+.touch-bar button:active { background: rgba(201,168,76,.25); }
 .camera-btn { border: 1px solid rgba(201,168,76,.5); background: transparent; color: var(--jijin); border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; }
 .camera-btn--primary { background: var(--jijin); color: #0a0d0a; font-weight: 600; }
 

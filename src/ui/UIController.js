@@ -52,6 +52,12 @@ export class UIController {
     this.cameraRetryBtn = document.getElementById('camera-retry-btn');
     this.cameraTouchBtn = document.getElementById('camera-touch-btn');
     this.orientationGate = document.getElementById('orientation-gate');
+    this.touchBar = document.getElementById('touch-bar');
+    this.onTouchAction = null;
+    this.touchBar?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-touch]');
+      if (btn) this.onTouchAction?.(btn.dataset.touch);
+    });
     this.onCameraRetry = null;
     this.onCameraTouchMode = null;
     this.touchMode = false;
@@ -406,6 +412,20 @@ export class UIController {
 
   setOrientationGate(show) {
     if (this.orientationGate) this.orientationGate.hidden = !show;
+  }
+
+  /** 触控备用条：手机端或摄像头不可用时显示，手势正常时隐藏 */
+  setTouchBar(show) {
+    if (this.touchBar) this.touchBar.hidden = !show;
+  }
+
+  shouldShowTouchBar(gestureActive) {
+    if (gestureActive && !this.touchMode) return false;
+    try {
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+    } catch (e) { /* ignore */ }
+    if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '')) return true;
+    return this.touchMode;
   }
 
   updateMaterialRestoreUI(factor) {

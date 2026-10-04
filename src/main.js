@@ -65,6 +65,9 @@ class App {
       if (s === 'atlas') this.router.sections.atlas?._initGestureAsync?.();
       else if (s === 'pattern') this.router.sections.pattern?._initGestureAsync?.();
     };
+    this.ui.onTouchAction = (action) => {
+      if (this.router.currentSection === 'atlas') this.router.sections.atlas?.handleTouchAction?.(action);
+    };
     this._bindOrientationGate();
 
     // 每次刷新/冷启动一律从首页入场（青铜门仪式），不按 hash 直达展厅
