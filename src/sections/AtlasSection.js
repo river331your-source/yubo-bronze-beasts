@@ -7,7 +7,6 @@ import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
 import { isMainLoopRunning, stopMainLoop } from '../core/FrameLoop.js';
 import { logAtlasViewportDiagnostics } from '../debug/atlasViewportDiagnostics.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
-import { shouldDeferHeavyInit, deferHeavyInit } from '../utils/heavyInitGate.js';
 
 /** 神兽图鉴：五件青铜器 + 三种交互模式 + 手势 */
 export class AtlasSection {
@@ -115,11 +114,6 @@ export class AtlasSection {
   /** onEnter: 显示版块 → resize → [startLoop | 静态帧] → 模型显示 */
   async onEnter() {
     if (this.active) return;
-    if (shouldDeferHeavyInit()) {
-      console.log('[AtlasSection] 竖屏手机 — 延迟 Three.js/FBX/MediaPipe 初始化，等待横屏');
-      deferHeavyInit(() => { if (!this.active) this.onEnter(); });
-      return;
-    }
     const enterGen = ++this._enterGen;
     const visitN = ++this._visitCount;
     const gateMode = this.behindGate;
@@ -334,10 +328,6 @@ export class AtlasSection {
   }
 
   async _startGesture(gen) {
-    if (shouldDeferHeavyInit()) {
-      console.log('[AtlasSection] 竖屏中 — 跳过摄像头/MediaPipe 启动');
-      return;
-    }
     try {
       const gc = new GestureController(this.videoEl);
       await gc.init();

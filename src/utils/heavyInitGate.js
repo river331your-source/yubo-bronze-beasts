@@ -4,11 +4,8 @@ let deferred = [];
 let flushedForOrientation = false;
 
 export function shouldDeferHeavyInit() {
-  try {
-    return isPortraitPhone();
-  } catch {
-    return false;
-  }
+  // 比赛手机版：竖屏也是完整可玩，不再因 portrait 延迟任何初始化
+  return false;
 }
 
 export function deferHeavyInit(fn) {

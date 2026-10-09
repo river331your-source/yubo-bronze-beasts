@@ -97,6 +97,70 @@ body {
   .camera-pip { width: 120px; height: 90px; }
 }
 
+/* ===== 比赛手机版 · 竖屏 portrait 布局（桌面端不受影响） ===== */
+@media (max-width: 768px) and (orientation: portrait) {
+  #viewport-16-9 { width: 100vw; height: 100dvh; max-height: 100dvh; aspect-ratio: auto; }
+  #main-page {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* 顶部只保留 Logo，隐藏完整导航与非核心按钮 */
+  .site-header { grid-template-columns: auto 1fr; padding: 0 12px; }
+  .site-nav { display: none; }
+  .site-tools { display: none; }
+  /* 图鉴：模型区 57% + 底部横向文物条 */
+  #section-atlas.atlas-shell { display: flex; flex-direction: column; }
+  .atlas-viewport { flex: 0 0 57%; min-height: 0; }
+  .arc-nav, #artifact-nav {
+    flex: 1 1 auto; min-height: 0; height: auto;
+    border-right: none; border-top: 1px solid rgba(111,148,120,.18);
+    overflow-x: auto; overflow-y: hidden;
+  }
+  .arc-scroll-col { display: none; }
+  .arc-nodes {
+    display: flex; flex-direction: row; align-items: stretch;
+    gap: 4px; padding: 8px 12px; width: max-content; min-width: 100%; height: 100%;
+  }
+  .arc-node, .arc-node[data-pos='0'], .arc-node[data-pos='1'],
+  .arc-node[data-pos='2'], .arc-node[data-pos='3'], .arc-node[data-pos='4'] {
+    position: static; top: auto; left: auto; transform: none;
+    flex: 0 0 auto; align-items: center;
+  }
+  .arc-node-body { min-width: 0; min-height: 0; padding: 6px 10px; }
+  .arc-silhouette, .arc-node.active .arc-silhouette {
+    width: 44px; max-height: 52px; position: static; transform: none;
+  }
+  .arc-era { display: none; }
+  .arc-node.active .arc-name { font-size: 13px; }
+  /* 摄像头小窗：右上，不压模型 */
+  .camera-pip {
+    width: 20vw; max-width: 120px; height: auto; aspect-ratio: 4 / 3;
+    top: calc(8px + env(safe-area-inset-top)); right: 8px; bottom: auto;
+  }
+  /* 长句提示隐藏，只留单行动动态状态 */
+  #section-atlas .interaction-hint { display: none; }
+  .gesture-status { top: calc(8px + env(safe-area-inset-top)); left: 8px; right: auto; font-size: 11px; }
+  .material-timeline { width: calc(100% - 24px); bottom: 8px; }
+  .touch-bar { bottom: 12px; }
+  /* 纹样：侧边切换器移到底部横排 */
+  .pattern-side-switcher {
+    left: 0; right: 0; top: auto; bottom: calc(8px + env(safe-area-inset-bottom));
+    transform: none; flex-direction: row; justify-content: flex-start;
+    overflow-x: auto; padding: 0 12px; gap: 12px;
+  }
+  .pattern-torch-layers { padding-left: 0; padding-bottom: 72px; }
+}
+
+/* ===== 比赛手机版 · 紧凑横屏（仅优化，不作使用条件） ===== */
+@media (max-height: 600px) and (orientation: landscape) {
+  #viewport-16-9 { width: 100vw; height: 100dvh; max-height: 100dvh; aspect-ratio: auto; }
+  #main-page { --header-h: 44px; --col-left: 190px; }
+  .site-header { padding: 0 12px; }
+  .site-nav { gap: 18px; }
+  .camera-pip { width: 110px; height: 82px; }
+  .interaction-hint { display: none; }
+}
+
 /* 16:9 画幅容器，居中显示，两侧/上下留黑边（勿对整页 zoom，会破坏 WebGL canvas 像素对齐） */
 #viewport-16-9 {
   position: relative;
@@ -1834,6 +1898,23 @@ body {
 
 .camera-pip.visible {
   opacity: 1;
+}
+
+/* PIP 收起：只留状态点，不停止 MediaPipe（仅隐藏画面） */
+.pip-toggle {
+  position: absolute; top: 2px; right: 2px; z-index: 3;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid rgba(201,168,76,.6); background: rgba(7,10,8,.8);
+  color: var(--jijin); font-size: 12px; line-height: 1; cursor: pointer; padding: 0;
+}
+.camera-pip.collapsed { width: 34px !important; height: 34px !important; aspect-ratio: auto; }
+.camera-pip.collapsed #camera-feed,
+.camera-pip.collapsed #skeleton-overlay { display: none; }
+.camera-pip.collapsed::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,.8);
+  transform: translate(-50%,-50%);
 }
 
 #skeleton-overlay {

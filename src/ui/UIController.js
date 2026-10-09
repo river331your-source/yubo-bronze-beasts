@@ -71,6 +71,13 @@ export class UIController {
       this.setTouchBar(true);
       this.onCameraTouchMode?.();
     });
+    this.pipToggle = document.getElementById('pip-toggle');
+    this.pipToggle?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pip = document.getElementById('camera-pip');
+      const collapsed = pip?.classList.toggle('collapsed');
+      if (this.pipToggle) this.pipToggle.textContent = collapsed ? '+' : '–';
+    });
 
     this.currentMode = 'deconstruct';
     this.currentArtifactIndex = DEFAULT_ARTIFACT_INDEX;

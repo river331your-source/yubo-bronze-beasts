@@ -1,8 +1,6 @@
 import './style.css';
 import { performanceMonitor } from './debug/PerformanceMonitor.js';
 import { stopMainLoop } from './core/FrameLoop.js';
-import { isPortraitPhone } from './utils/deviceProfile.js';
-import { flushDeferredHeavyInit } from './utils/heavyInitGate.js';
 import { UIController } from './ui/UIController.js';
 import { AppRouter } from './core/AppRouter.js';
 import { HomeSection } from './sections/HomeSection.js';
@@ -87,14 +85,9 @@ class App {
   };
 
   _bindOrientationGate() {
-    const update = () => {
-      const portrait = isPortraitPhone();
-      this.ui.setOrientationGate(portrait);
-      if (!portrait) flushDeferredHeavyInit('landscape');
-    };
-    update();
-    window.addEventListener('orientationchange', () => setTimeout(update, 120));
-    window.addEventListener('resize', update);
+    // 比赛手机版：竖屏完整可玩，orientation-gate 永不显示；
+    // 横竖屏切换仅由 CSS responsive layout 承担，不阻止运行、不重复初始化。
+    this.ui.setOrientationGate(false);
   }
 
   destroy() {

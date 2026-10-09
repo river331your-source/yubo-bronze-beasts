@@ -5,7 +5,6 @@ import {
   preloadTaotieGold,
   purgeStaleBronzeGates,
 } from '../interactions/BronzeDoorGate.js';
-import { shouldDeferHeavyInit } from '../utils/heavyInitGate.js';
 
 /**
  * HOME 版块 — 金色标题 + 入场动画 +「进入展厅」
@@ -47,10 +46,6 @@ export class HomeSection {
 
   _handleEnterClick() {
     if (this.gate || this._gateTransitioning || !this.enterBtn) return;
-    if (shouldDeferHeavyInit()) {
-      console.log('[HomeSection] 竖屏中 — 进入展厅已延迟，请先横屏');
-      return;
-    }
 
     this._setEnterBtnLoading(true);
     this._gateTransitioning = true;
