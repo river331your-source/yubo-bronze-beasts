@@ -113,8 +113,13 @@ export class PatternFlashlightInteraction {
     this._createOffscreenCanvases();
 
     this._onPointerDown = (e) => {
-      if (!this.active || e.button !== 0 || this._gestureRubbing || this._lifted) return;
+      if (!this.active || this._gestureRubbing || this._lifted) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.target.closest('button')) return;
+      e.preventDefault();
+      try {
+        this.rubCanvasEl?.setPointerCapture?.(e.pointerId);
+      } catch (captureErr) { /* 旧浏览器忽略 */ }
       this._drawing = true;
       this._tapFromClient(e.clientX, e.clientY);
     };
@@ -281,6 +286,8 @@ export class PatternFlashlightInteraction {
     this.rubCanvasEl?.remove();
     this.rubCanvasEl = null;
     this.displayCtx = null;
+    this._exportPreviewEl?.remove();
+    this._exportPreviewEl = null;
 
     this._progressEl?.remove();
     this._progressEl = null;
@@ -605,15 +612,54 @@ export class PatternFlashlightInteraction {
     c.fillText(`拓于 ${new Date().toLocaleDateString('zh-CN')}`, W2 * 0.95, H2 * 0.965);
 
     ex.toBlob((blob) => {
-      if (!blob) return;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `豫博青铜神兽录_${name}拓片.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (!blob) {
+        console.warn('[导出] toBlob 为空，无法生成拓片');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `豫博青铜神兽录_${name}拓片.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (dlErr) {
+        console.warn('[导出] 自动下载失败，改用预览长按保存:', dlErr?.message ?? dlErr);
+      }
+      this._showExportPreview(url, name);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }, 'image/png');
+  }
+
+  /** 导出预览：移动端下载被拦截时可长按保存拓片 */
+  _showExportPreview(url, name) {
+    this._exportPreviewEl?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'pattern-export-preview';
+    overlay.innerHTML = `
+      <div class="pattern-export-card">
+        <p class="pattern-export-title">${name} · 数字拓片已生成</p>
+        <img class="pattern-export-img" alt="数字拓片预览" draggable="false" />
+        <p class="pattern-export-hint">长按图片可保存拓片</p>
+        <button type="button" class="pattern-export-close">继 续 捶 拓</button>
+      </div>
+    `;
+    const img = overlay.querySelector('.pattern-export-img');
+    if (img) img.src = url;
+    overlay.querySelector('.pattern-export-close')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      overlay.remove();
+      this._exportPreviewEl = null;
+    });
+    overlay.addEventListener('pointerdown', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+        this._exportPreviewEl = null;
+      }
+    });
+    (this.stageEl ?? document.body).appendChild(overlay);
+    this._exportPreviewEl = overlay;
   }
 
   _invalidateLiftCache() {
@@ -801,9 +847,15 @@ export class PatternFlashlightInteraction {
   }
 
   _clientToGoldLocal(clientX, clientY) {
-    const rect = this.dimLayer?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return null;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    const target = this.rubCanvasEl ?? this.dimLayer;
+    const rect = target?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    const scaleX = (this.rubCanvasEl?.width || rect.width) / rect.width;
+    const scaleY = (this.rubCanvasEl?.height || rect.height) / rect.height;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
   }
 
   _tap(x, y) {
