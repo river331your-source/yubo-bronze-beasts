@@ -139,6 +139,7 @@ body {
   .m-menu .site-nav-item.active { color: #d5b464; }
   .main-body { display: flex; flex-direction: column; }
   .stage-column { flex: 1 1 auto; min-height: 0; }
+}
 @media (pointer: coarse) and (orientation: landscape) {
   #viewport-16-9 {
     position: fixed; inset: 0;
