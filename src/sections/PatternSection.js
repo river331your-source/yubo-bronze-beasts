@@ -13,8 +13,6 @@ import {
   PATTERN_VESSELS,
   getPatternVessel,
 } from '../data/pattern-vessels.js';
-import { TutorialController } from '../tutorial/TutorialController.js';
-import { RubHintController } from '../tutorial/RubHintController.js';
 import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
 import { shouldDeferHeavyInit, deferHeavyInit } from '../utils/heavyInitGate.js';
 
@@ -37,7 +35,6 @@ export class PatternSection {
     this._patternDetectListener = () => this._onPatternDetect();
     this._gestureInitGen = 0;
     this._lineartPreloads = null;
-    this._rubHint = new RubHintController();
   }
 
   /** onEnter: 线稿舞台 + 捶拓 + 左侧器物切换器 */
@@ -77,7 +74,6 @@ export class PatternSection {
     stopMainLoop();
     startMainLoop('pattern', this._patternFrameListener, this._patternDetectListener);
     this._initGestureAsync();
-    this._rubHint.show(this.torchStage);
   }
 
   /** onLeave: 停止检测循环、关闭摄像头 */
@@ -85,7 +81,6 @@ export class PatternSection {
     if (!this.active) return;
     this.active = false;
     this._gestureInitGen += 1;
-    this._rubHint.hide();
 
     stopMainLoop();
 

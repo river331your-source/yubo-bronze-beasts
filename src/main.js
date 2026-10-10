@@ -7,8 +7,7 @@ import { HomeSection } from './sections/HomeSection.js';
 import { AtlasSection } from './sections/AtlasSection.js';
 import { PatternSection } from './sections/PatternSection.js';
 import { PlaceholderSection } from './sections/PlaceholderSection.js';
-import { GuideOverlay } from './tutorial/GuideOverlay.js';
-import { drawGuideHand } from './tutorial/guideHands.js';
+import { preloadTaotieGold } from './interactions/BronzeDoorGate.js';
 import { isMobilePortrait } from './utils/deviceProfile.js';
 import { flushDeferredHeavyInit } from './utils/heavyInitGate.js';
 
@@ -95,17 +94,6 @@ class App {
     this.ui.onTouchAction = (action) => {
       if (this.router.currentSection === 'atlas') this.router.sections.atlas?.handleTouchAction?.(action);
     };
-    this._guide = new GuideOverlay(drawGuideHand);
-    this._guide.onReplay = () => {
-      if (this.router.currentSection !== 'atlas') {
-        this.router.switchSection('atlas').then(() => {
-          this.router.sections.atlas?.replayTutorial?.();
-        });
-      } else {
-        this.router.sections.atlas?.replayTutorial?.();
-      }
-    };
-    this.ui.onGuideOpen = () => this._guide.show();
     this._bindOrientationGate();
     syncVisualViewportHeight();
     window.addEventListener('resize', syncVisualViewportHeight);
