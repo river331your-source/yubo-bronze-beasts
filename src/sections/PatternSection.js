@@ -48,6 +48,15 @@ export class PatternSection {
       getVessel: () => getPatternVessel(this.vesselIndex),
     });
     this.flashlight.activate();
+    this._bindLayoutResync();
+    requestAnimationFrame(() => {
+      this.flashlight?.syncLayout?.();
+      this._logMobileDebug('enter-rAF');
+      requestAnimationFrame(() => {
+        this.flashlight?.syncLayout?.();
+        this._logMobileDebug('enter-rAF2');
+      });
+    });
 
     this.switchPatternVessel(DEFAULT_PATTERN_VESSEL_INDEX);
     this.ui._applySectionHint('pattern');
@@ -75,6 +84,7 @@ export class PatternSection {
     }
 
     this._unbindSideSwitcher();
+    this._unbindLayoutResync();
 
     this.flashlight?.dispose();
     this.flashlight = null;
@@ -106,6 +116,52 @@ export class PatternSection {
       this._updateSideSwitcherUI(getPatternVessel(prevIndex));
       console.error('[PatternSection] 器物切换失败，已回滚 UI:', err);
     }
+  }
+
+  /** 移动端尺寸自检：stage/stack/canvas 必须 > 0 */
+  _logMobileDebug(tag) {
+    try {
+      const stage = this.torchStage?.getBoundingClientRect();
+      const stack = this.flashlight?.lineartStack?.getBoundingClientRect();
+      console.log('[Pattern Mobile Debug]', {
+        tag,
+        active: this.active,
+        stage: stage && { w: Math.round(stage.width), h: Math.round(stage.height) },
+        stack: stack && { w: Math.round(stack.width), h: Math.round(stack.height) },
+        canvas: {
+          width: this.flashlight?.rubCanvasEl?.width ?? 0,
+          height: this.flashlight?.rubCanvasEl?.height ?? 0,
+        },
+        lineart: {
+          src: getPatternVessel(this.vesselIndex)?.lineartSrc,
+          naturalWidth: this.flashlight?.dimLayer?.naturalWidth ?? 0,
+          naturalHeight: this.flashlight?.dimLayer?.naturalHeight ?? 0,
+        },
+      });
+    } catch (err) {
+      console.warn('[Pattern Mobile Debug] 自检失败:', err?.message ?? err);
+    }
+  }
+
+  /** 横竖屏/尺寸变化后重同步 canvas，不重建交互 */
+  _bindLayoutResync() {
+    if (this._onLayoutResync) return;
+    this._onLayoutResync = () => {
+      if (!this.active) return;
+      requestAnimationFrame(() => {
+        this.flashlight?.syncLayout?.();
+        this._logMobileDebug('resize');
+      });
+    };
+    window.addEventListener('orientationchange', this._onLayoutResync);
+    window.addEventListener('resize', this._onLayoutResync);
+  }
+
+  _unbindLayoutResync() {
+    if (!this._onLayoutResync) return;
+    window.removeEventListener('orientationchange', this._onLayoutResync);
+    window.removeEventListener('resize', this._onLayoutResync);
+    this._onLayoutResync = null;
   }
 
   /** 按器物 id 切换（供左侧切换器 / 档案卡联动） */

@@ -705,6 +705,11 @@ export class PatternFlashlightInteraction {
     this._currentLineartSrc = this.goldLayer?.src ?? null;
     this._goldCache = getOrBuildGoldCache(this._currentLineartSrc, this.goldLayer);
     if (strict && !this._goldCache) {
+      console.error('[PatternFlashlightInteraction] 线稿加载失败:', {
+        src: this._currentLineartSrc,
+        dimNatural: [this.dimLayer?.naturalWidth ?? 0, this.dimLayer?.naturalHeight ?? 0],
+        goldNatural: [this.goldLayer?.naturalWidth ?? 0, this.goldLayer?.naturalHeight ?? 0],
+      });
       throw new Error('gold lineart cache build failed');
     }
 
@@ -755,6 +760,18 @@ export class PatternFlashlightInteraction {
     this._paintArtLayer();
     this._invalidateLiftCache();
     this._dirty = true;
+  }
+
+  /** 公共布局同步：可见后主动调用，隐藏态初始化导致 0×0 时自愈 */
+  syncLayout() {
+    if (!this.active) return false;
+    if (!this.rubCanvasEl) this._createDisplayCanvas();
+    this._syncCanvasSize();
+    if (!this._w || !this._h) {
+      console.warn('[PatternFlashlightInteraction] syncLayout 跳过：版块不可见');
+      return false;
+    }
+    return true;
   }
 
   _paintArtLayer() {
