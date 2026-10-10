@@ -47,6 +47,7 @@ export class HomeSection {
 
   _handleEnterClick() {
     if (this.gate || this._gateTransitioning || !this.enterBtn) return;
+    if (this.enterBtn.disabled || this.enterBtn.getAttribute('aria-busy') === 'true') return;
     if (shouldDeferHeavyInit()) {
       console.log('[HomeSection] 手机竖屏中 — 进入展厅已延迟，请先横屏');
       return;

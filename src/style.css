@@ -115,7 +115,10 @@ body {
     background: rgba(5, 16, 12, .42);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   }
-  body[data-section='home'] .m-corenav { display: none; }
+  body[data-section='home'] .m-corenav,
+  body:not([data-section]) .m-corenav,
+  body:not(.inside-museum) .m-corenav { display: none !important; }
+  body.inside-museum .m-corenav { display: flex; }
   body[data-section='home'] .site-tools { display: flex; }
   body[data-section='home'] .m-menuwrap { display: none; }
   body[data-section='home'] .site-tools [aria-label='菜单'] { display: none; }
