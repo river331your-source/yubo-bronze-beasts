@@ -18,13 +18,25 @@ function syncVisualViewportHeight() {
   const viewport = window.visualViewport;
   const height = Math.round(viewport?.height || window.innerHeight);
   document.documentElement.style.setProperty('--app-vh', `${height}px`);
+  syncEnterButtonSafeArea();
   if (new URLSearchParams(location.search).has('vhdebug')) {
-    console.log('[vhdebug]', {
-      viewportHeight: viewport?.height ?? null,
-      innerHeight: window.innerHeight,
-      enterButton: document.querySelector('#enter-btn')?.getBoundingClientRect(),
+    const rect = document.querySelector('#enter-btn')?.getBoundingClientRect();
+    console.log('[Enter Button Check]', {
+      top: rect?.top ?? null,
+      bottom: rect?.bottom ?? null,
+      height: rect?.height ?? null,
+      viewportHeight: viewport?.height ?? window.innerHeight,
+      visible: !!rect && rect.top >= 0 && rect.bottom <= (viewport?.height ?? window.innerHeight),
     });
   }
+}
+
+/** 进入按钮底部间隙：跟随 VisualViewport，不被 Safari 工具栏覆盖 */
+function syncEnterButtonSafeArea() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const gap = Math.max(16, window.innerHeight - vv.height - vv.offsetTop + 16);
+  document.documentElement.style.setProperty('--vv-bottom-gap', `${Math.round(gap)}px`);
 }
 
 class App {
@@ -87,8 +99,10 @@ class App {
     window.addEventListener('resize', syncVisualViewportHeight);
     window.addEventListener('orientationchange', () => {
       setTimeout(syncVisualViewportHeight, 100);
+      setTimeout(syncEnterButtonSafeArea, 300);
     });
     window.visualViewport?.addEventListener('resize', syncVisualViewportHeight);
+    window.visualViewport?.addEventListener('scroll', syncEnterButtonSafeArea);
 
     // 每次刷新/冷启动一律从首页入场（青铜门仪式），不按 hash 直达展厅
     if (location.hash) {

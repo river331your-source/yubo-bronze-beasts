@@ -114,7 +114,7 @@ body {
   }
   .home-title-img {
     width: auto; max-width: 52vw;
-    max-height: calc(var(--app-vh, 100dvh) * 0.34);
+    max-height: calc(var(--app-vh, 100dvh) * 0.3);
   }
   .home-layer--content {
     position: relative; flex: 1 1 auto; min-height: 0;
@@ -123,12 +123,28 @@ body {
   .home-copy-block {
     position: relative; top: auto; left: auto; transform: none;
     margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    gap: 6px;
   }
-  .home-subtitle { font-size: 14px; letter-spacing: 0.28em; }
-  .home-desc { font-size: 11px; margin-top: 8px; }
+  .home-subtitle { font-size: 14px; letter-spacing: 0.28em; margin: 0; }
+  .home-desc { font-size: 11px; margin: 0; }
   .enter-btn { margin-top: 14px; }
   .enter-btn-ring { width: 44px; height: 44px; }
   .enter-btn-cross { width: 44px; height: 44px; }
+  /* 进入展厅：固定可视底部，点击区达标，文字必现 */
+  #enter-btn {
+    position: fixed; left: 50%;
+    bottom: var(--vv-bottom-gap, calc(env(safe-area-inset-bottom, 0px) + 16px));
+    transform: translateX(-50%); z-index: 50;
+    min-width: 120px; min-height: 48px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  @keyframes home-enter-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  #section-home.home-animate #enter-btn {
+    animation: home-enter-in 0.6s ease forwards 2.9s;
+  }
   /* 非核心元素横屏隐藏：竖排文案、印章、工具按钮 */
   .home-vert { display: none; }
   .home-seal-wrap { display: none; }
