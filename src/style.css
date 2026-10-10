@@ -110,7 +110,7 @@ body {
     grid-column: 2; grid-row: 1; align-self: center; justify-self: start;
     position: static; transform: none;
     display: flex; align-items: center; gap: 20px;
-    margin-left: 36px; padding: 6px 14px;
+    margin-left: 26px; padding: 6px 14px;
     border: 1px solid rgba(195, 160, 78, .22); border-radius: 18px;
     background: rgba(5, 16, 12, .42);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
