@@ -92,10 +92,49 @@ body {
 .camera-btn { border: 1px solid rgba(201,168,76,.5); background: transparent; color: var(--jijin); border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; }
 .camera-btn--primary { background: var(--jijin); color: #0a0d0a; font-weight: 600; }
 
-/* 手机横屏：撑满安全区，画幅填满视口 */
+/* 手机横屏：按 VisualViewport 真实高度排布，撑满安全区 */
 .m-tabbar { display: none; }
 @media (pointer: coarse) and (orientation: landscape) {
-  #viewport-16-9 { width: 100vw; height: 100dvh; max-height: 100dvh; aspect-ratio: auto; }
+  #viewport-16-9 {
+    position: fixed; inset: 0;
+    width: 100vw; height: var(--app-vh, 100dvh); max-height: var(--app-vh, 100dvh);
+    aspect-ratio: auto; transform: none !important; margin: 0; overflow: hidden;
+  }
+  #app, .page { width: 100%; height: 100%; }
+  #main-page {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  /* 首页三段式：标题区 / 弹性留白 / 按钮区，按钮永不被挤出 */
+  #section-home { display: flex; flex-direction: column; }
+  .home-layer--taotie, .home-layer--starmap { position: absolute; }
+  .home-layer--title {
+    position: relative; flex: 0 1 auto; min-height: 0;
+    padding-top: calc(env(safe-area-inset-top) + 4px);
+  }
+  .home-title-img {
+    width: auto; max-width: 52vw;
+    max-height: calc(var(--app-vh, 100dvh) * 0.34);
+  }
+  .home-layer--content {
+    position: relative; flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  }
+  .home-copy-block {
+    position: relative; top: auto; left: auto; transform: none;
+    margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  }
+  .home-subtitle { font-size: 14px; letter-spacing: 0.28em; }
+  .home-desc { font-size: 11px; margin-top: 8px; }
+  .enter-btn { margin-top: 14px; }
+  .enter-btn-ring { width: 44px; height: 44px; }
+  .enter-btn-cross { width: 44px; height: 44px; }
+  /* 非核心元素横屏隐藏：竖排文案、印章、工具按钮 */
+  .home-vert { display: none; }
+  .home-seal-wrap { display: none; }
+  .site-tools { display: none; }
+  .site-header { grid-template-columns: auto 1fr; }
+  .site-nav { gap: 18px; }
   .camera-pip { width: 120px; height: 90px; }
 }
 
@@ -103,7 +142,7 @@ body {
 @media (max-width: 768px) and (orientation: portrait) {
   #viewport-16-9 {
     position: fixed; inset: 0;
-    width: 100vw; height: 100dvh; max-height: 100dvh;
+    width: 100vw; height: var(--app-vh, 100dvh); max-height: var(--app-vh, 100dvh);
     aspect-ratio: auto; transform: none !important; margin: 0;
   }
   #app, .page { width: 100%; height: 100%; }
@@ -178,7 +217,7 @@ body {
 
 /* ===== 比赛手机版 · 紧凑横屏（仅优化，不作使用条件） ===== */
 @media (max-height: 600px) and (orientation: landscape) {
-  #viewport-16-9 { width: 100vw; height: 100dvh; max-height: 100dvh; aspect-ratio: auto; }
+  #viewport-16-9 { width: 100vw; height: var(--app-vh, 100dvh); max-height: var(--app-vh, 100dvh); aspect-ratio: auto; }
   #main-page { --header-h: 44px; --col-left: 190px; }
   .site-header { padding: 0 12px; }
   .site-nav { gap: 18px; }

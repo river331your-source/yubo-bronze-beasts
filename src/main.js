@@ -13,6 +13,20 @@ import { flushDeferredHeavyInit } from './utils/heavyInitGate.js';
 
 const SECTION_IDS = ['home', 'atlas', 'pattern', 'craft', 'story'];
 
+/** 真实可视高度：iPhone Safari 地址栏/工具栏会吃掉 100vh */
+function syncVisualViewportHeight() {
+  const viewport = window.visualViewport;
+  const height = Math.round(viewport?.height || window.innerHeight);
+  document.documentElement.style.setProperty('--app-vh', `${height}px`);
+  if (new URLSearchParams(location.search).has('vhdebug')) {
+    console.log('[vhdebug]', {
+      viewportHeight: viewport?.height ?? null,
+      innerHeight: window.innerHeight,
+      enterButton: document.querySelector('#enter-btn')?.getBoundingClientRect(),
+    });
+  }
+}
+
 class App {
   constructor() {
     this.ui = new UIController();
@@ -69,6 +83,12 @@ class App {
       if (this.router.currentSection === 'atlas') this.router.sections.atlas?.handleTouchAction?.(action);
     };
     this._bindOrientationGate();
+    syncVisualViewportHeight();
+    window.addEventListener('resize', syncVisualViewportHeight);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(syncVisualViewportHeight, 100);
+    });
+    window.visualViewport?.addEventListener('resize', syncVisualViewportHeight);
 
     // 每次刷新/冷启动一律从首页入场（青铜门仪式），不按 hash 直达展厅
     if (location.hash) {
