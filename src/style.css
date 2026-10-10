@@ -92,6 +92,7 @@ body {
 .camera-btn--primary { background: var(--jijin); color: #0a0d0a; font-weight: 600; }
 
 /* 手机横屏：撑满安全区，画幅填满视口 */
+.m-tabbar { display: none; }
 @media (pointer: coarse) and (orientation: landscape) {
   #viewport-16-9 { width: 100vw; height: 100dvh; max-height: 100dvh; aspect-ratio: auto; }
   .camera-pip { width: 120px; height: 90px; }
@@ -142,13 +143,23 @@ body {
   .gesture-status { top: calc(8px + env(safe-area-inset-top)); left: 8px; right: auto; font-size: 11px; }
   .material-timeline { width: calc(100% - 24px); bottom: 8px; }
   .touch-bar { bottom: 12px; }
-  /* 纹样：侧边切换器移到底部横排 */
+  /* 移动端底部导航：复用 site-nav-item 绑定与高亮逻辑 */
+  .m-tabbar {
+    display: flex; position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(7,10,8,.92); border-top: 1px solid rgba(111,148,120,.18);
+  }
+  .m-tabbar .site-nav-item { flex: 1 1 0; padding: 6px 0; min-width: 0; }
+  .m-tabbar .site-nav-label { font-size: 12px; }
+  .m-tabbar .site-nav-item::after { display: none; }
+  /* 纹样线稿在竖屏占满宽度 */
+  .pattern-lineart-stack { width: min(94%, 760px); }
   .pattern-side-switcher {
-    left: 0; right: 0; top: auto; bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 0; right: 0; top: auto; bottom: 64px;
     transform: none; flex-direction: row; justify-content: flex-start;
     overflow-x: auto; padding: 0 12px; gap: 12px;
   }
-  .pattern-torch-layers { padding-left: 0; padding-bottom: 72px; }
+  .pattern-torch-layers { padding-left: 0; padding-bottom: 128px; }
 }
 
 /* ===== 比赛手机版 · 紧凑横屏（仅优化，不作使用条件） ===== */
