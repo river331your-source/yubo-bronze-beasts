@@ -60,6 +60,7 @@ export class UIController {
     });
     this.onCameraRetry = null;
     this.onCameraTouchMode = null;
+    this.onGuideOpen = null;
     this.touchMode = false;
     this.cameraRetryBtn?.addEventListener('click', () => {
       this.hideCameraPrompt();
@@ -104,6 +105,14 @@ export class UIController {
         if (btn.dataset.mode) this._requestedMode = btn.dataset.mode;
         this._lastNavRequest = { nav: btn.dataset.nav, mode: btn.dataset.mode ?? null };
         this.onNavSelect?.(btn.dataset.nav);
+        if (this.mMenu) this.mMenu.hidden = true;
+      });
+    });
+    this.mainPage.querySelectorAll('[data-guide="open"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.mMenu) this.mMenu.hidden = true;
+        this.onGuideOpen?.();
       });
     });
 

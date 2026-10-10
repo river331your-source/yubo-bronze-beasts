@@ -5,6 +5,8 @@ import { MaterialRestoreInteraction } from '../interactions/MaterialRestoreInter
 import { SkeletonOverlay } from '../ui/SkeletonOverlay.js';
 import { DEFAULT_ARTIFACT_INDEX, ARTIFACTS } from '../data/artifacts.js';
 import { isMainLoopRunning, stopMainLoop } from '../core/FrameLoop.js';
+import { TutorialController } from '../tutorial/TutorialController.js';
+import { TutorialOverlay } from '../tutorial/TutorialOverlay.js';
 import { shouldDeferHeavyInit, deferHeavyInit } from '../utils/heavyInitGate.js';
 import { logAtlasViewportDiagnostics } from '../debug/atlasViewportDiagnostics.js';
 import { performanceMonitor } from '../debug/PerformanceMonitor.js';
@@ -24,6 +26,7 @@ export class AtlasSection {
     this.interactions = {};
     this._onKeydown = null;
     this._artifactSwitchBusy = false;
+    this.tutorial = null;
     this._atlasFrameListener = (dt) => this._onAtlasFrame(dt);
     this._atlasDetectListener = () => this._onAtlasDetect();
     /** 递增以取消进行中的异步摄像头初始化 */
@@ -151,6 +154,7 @@ export class AtlasSection {
 
     this._ensureInteractions();
     this._bindKeyboard();
+    this._ensureTutorial();
 
     this.sceneManager.addFrameListener(this._atlasFrameListener);
     this.sceneManager.addPostFrameListener(this._atlasDetectListener);
@@ -215,6 +219,7 @@ export class AtlasSection {
     if (!this.deferGesture) {
       this.ui.setTouchBar(this.ui.shouldShowTouchBar(false));
       this._initGestureAsync();
+      this._maybeStartTutorial();
     }
 
     window.setTimeout(() => {
@@ -234,6 +239,24 @@ export class AtlasSection {
       deconstruct: new DeconstructInteraction(this.sceneManager, this.ui),
       material: new MaterialRestoreInteraction(this.sceneManager, this.ui),
     };
+  }
+
+  /** 首次引导：无痕重建，自动启动（完成过则不打扰） */
+  _ensureTutorial() {
+    if (this.tutorial) return;
+    const overlay = new TutorialOverlay();
+    overlay.onSkip = () => this.tutorial?.skip();
+    this.tutorial = new TutorialController({ overlay, section: this });
+  }
+
+  _maybeStartTutorial() {
+    if (!this.tutorial || TutorialController.completedBefore()) return;
+    this.tutorial.start({ touchOnly: this.ui.touchMode });
+  }
+
+  replayTutorial() {
+    this._ensureTutorial();
+    this.tutorial.restart();
   }
 
   _teardownSceneManager() {
@@ -268,6 +291,7 @@ export class AtlasSection {
     if (!this.active) return;
     this.active = false;
     this.ui.setTouchBar(false);
+    this.tutorial?.stop(false);
     this.behindGate = false;
     this.deferGesture = false;
     this._enterGen += 1;
@@ -359,6 +383,10 @@ export class AtlasSection {
       gc.onGestureChange = (gesture) => {
         this.ui.updateGestureLabel(gesture);
         this._handleGesture(gesture);
+        this.tutorial?.handleGesture(gesture);
+        if (gesture !== 'none' && gesture !== 'unknown') {
+          this.tutorial?.handleCameraReady?.();
+        }
       };
 
       gc.onHandsDistanceChange = (dist) => {
@@ -387,6 +415,11 @@ export class AtlasSection {
       }
       if (!this.ui.touchMode) this.ui.showCameraPrompt(err?.code);
       this.ui.setTouchBar(this.ui.shouldShowTouchBar(false, true));
+      this.tutorial?.handleCameraFailed();
+      if (!TutorialController.completedBefore()) {
+        this._ensureTutorial();
+        this.tutorial.start({ touchOnly: true });
+      }
     }
   }
 
@@ -404,6 +437,7 @@ export class AtlasSection {
 
   handleTouchAction(action) {
     if (!this.active) return;
+    if (this.tutorial?.handleTouchAction(action)) return;
     if (action === 'gather') this._touchSetStates('solid', 0);
     else if (action === 'deconstruct') this._touchSetStates(1, 0);
     else if (action === 'dissolve') this._touchSetStates(1, 1);
