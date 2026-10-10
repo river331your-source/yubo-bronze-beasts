@@ -179,6 +179,11 @@ export class AtlasSection {
       this.switchMode(this.currentMode || 'deconstruct');
     }
 
+    if (this.ui._requestedMode && this.interactions[this.ui._requestedMode]) {
+      this.switchMode(this.ui._requestedMode);
+    }
+    this.ui._requestedMode = null;
+
     this.ui.syncArtifactStages();
     this.ui.logSectionState('AtlasSection.onEnter');
 

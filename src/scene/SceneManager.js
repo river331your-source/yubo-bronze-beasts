@@ -446,7 +446,7 @@ export class SceneManager {
     group.updateWorldMatrix(true, true);
   }
 
-  /** 相机对准舞台正中央 */
+  /** 相机对准舞台正中央（竖屏按水平视场补足距离，保证模型不被裁边） */
   _frameToCenter() {
     this.modelContainer.updateWorldMatrix(true, true);
 
@@ -457,7 +457,10 @@ export class SceneManager {
     const maxDim = Math.max(size.x, size.y, size.z, 0.01);
 
     const fovRad = (this.camera.fov * Math.PI) / 180;
-    const dist = (maxDim / 2 / Math.tan(fovRad / 2)) * 1.25;
+    const vFit = maxDim / 2 / Math.tan(fovRad / 2);
+    const hFov = 2 * Math.atan(Math.tan(fovRad / 2) * this.camera.aspect);
+    const hFit = maxDim / 2 / Math.tan(hFov / 2);
+    const dist = Math.max(vFit, hFit) * 1.25;
 
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, Math.max(dist, 2.2));
@@ -627,6 +630,10 @@ export class SceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    if (this.camera.aspect < 1) {
+      this._frameToCenter();
+      this.renderer.render(this.scene, this.camera);
+    }
     logAtlasViewportDiagnostics('resize', this);
   }
 

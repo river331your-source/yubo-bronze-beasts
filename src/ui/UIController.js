@@ -101,6 +101,8 @@ export class UIController {
     this.mainPage.querySelectorAll('.site-nav-item[data-nav], .nav-logo[data-nav]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
+        if (btn.dataset.mode) this._requestedMode = btn.dataset.mode;
+        this._lastNavRequest = { nav: btn.dataset.nav, mode: btn.dataset.mode ?? null };
         this.onNavSelect?.(btn.dataset.nav);
       });
     });
@@ -306,8 +308,15 @@ export class UIController {
   }
 
   setActiveNav(navId) {
+    const req = this._lastNavRequest;
     this.mainPage.querySelectorAll('.site-nav-item[data-nav]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.nav === navId);
+      const navMatch = btn.dataset.nav === navId;
+      let modeMatch = true;
+      if (btn.closest('.m-tabbar')) {
+        const btnMode = btn.dataset.mode ?? null;
+        modeMatch = req && req.nav === navId ? btnMode === req.mode : !btnMode;
+      }
+      btn.classList.toggle('active', navMatch && modeMatch);
     });
   }
 
