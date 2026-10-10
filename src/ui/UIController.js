@@ -184,6 +184,7 @@ export class UIController {
 
     this.currentSection = sectionId;
     this.mainBody?.setAttribute('data-section', sectionId);
+    document.body.setAttribute('data-section', sectionId);
 
     const isHome = sectionId === 'home';
     const isAtlas = sectionId === 'atlas';

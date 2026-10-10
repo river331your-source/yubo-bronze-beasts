@@ -98,15 +98,23 @@ body {
 .m-corenav, .m-menuwrap { display: none; }
 @media (pointer: coarse) and (orientation: landscape) {
   .site-header {
-    position: relative; z-index: 100; flex-shrink: 0;
-    height: 52px; min-height: 52px; max-height: 52px;
-    grid-template-columns: auto 1fr auto;
+    position: relative; z-index: 200; flex-shrink: 0;
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+    height: 54px; min-height: 54px; max-height: 54px;
     padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
   }
+  .nav-logo { grid-column: 1; grid-row: 1; align-self: center; }
   .nav-logo img { height: 24px; width: auto; }
   .site-nav { display: none; }
-  .site-tools { display: none; }
-  .m-corenav { display: flex; align-items: center; justify-content: center; gap: 28px; }
+  .m-corenav {
+    grid-column: 2; grid-row: 1; align-self: center; justify-self: center;
+    position: static; transform: none;
+    display: flex; align-items: center; justify-content: center; gap: 30px;
+  }
+  body[data-section='home'] .m-corenav { display: none; }
+  body[data-section='home'] .site-tools { display: flex; }
+  body[data-section='home'] .m-menuwrap { display: none; }
+  .site-tools { display: none; grid-column: 3; grid-row: 1; align-self: center; }
   .m-corenav .site-nav-item {
     background: none; border: 0; padding: 4px 2px 6px; min-width: 0;
     color: rgba(198, 164, 84, .55); font-size: 15px; letter-spacing: .12em;
@@ -120,7 +128,7 @@ body {
   }
   .m-corenav .site-nav-item.active { color: #d5b464; }
   .m-corenav .site-nav-item.active .site-nav-line { background: #d5b464; }
-  .m-menuwrap { display: block; position: relative; }
+  .m-menuwrap { display: block; position: relative; grid-column: 3; grid-row: 1; align-self: center; justify-self: end; }
   .m-menu-btn {
     background: none; border: 0; color: var(--jijin);
     font-size: 18px; padding: 6px 8px; cursor: pointer;
@@ -219,11 +227,9 @@ body {
   #section-home.home-animate #enter-btn {
     animation: home-enter-in 0.6s ease forwards 2.9s;
   }
-  /* 非核心元素横屏隐藏：竖排文案、印章、工具按钮 */
+  /* 非核心元素横屏隐藏：竖排文案、印章 */
   .home-vert { display: none; }
   .home-seal-wrap { display: none; }
-  .site-tools { display: none; }
-  .site-header { grid-template-columns: auto 1fr; }
   .site-nav { gap: 18px; }
   .camera-pip { width: 120px; height: 90px; }
 }
@@ -247,6 +253,7 @@ body {
   }
   .site-nav { display: none; }
   .site-tools { display: none; }
+  .m-corenav, .m-menuwrap { display: none; }
   /* 纵向展厅：头部 / 3D舞台 / 文物条 / 状态 / 底部导航 */
   .main-body { display: flex; flex-direction: column; }
   .stage-column { flex: 1 1 auto; min-height: 0; grid-column: auto; }
