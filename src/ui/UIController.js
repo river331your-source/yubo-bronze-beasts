@@ -109,6 +109,18 @@ export class UIController {
 
     this.artifactPrevBtn?.addEventListener('click', () => this.selectPrevArtifact());
 
+    this.mMenuBtn = this.mainPage.querySelector('.m-menu-btn');
+    this.mMenu = this.mainPage.querySelector('.m-menu');
+    this.mMenuBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.mMenu) this.mMenu.hidden = !this.mMenu.hidden;
+    });
+    document.addEventListener('click', (e) => {
+      if (this.mMenu && !this.mMenu.hidden && !e.target.closest('.m-menuwrap')) {
+        this.mMenu.hidden = true;
+      }
+    });
+
     this.mainPage.addEventListener(
       'wheel',
       (e) => {
@@ -312,7 +324,7 @@ export class UIController {
     this.mainPage.querySelectorAll('.site-nav-item[data-nav]').forEach((btn) => {
       const navMatch = btn.dataset.nav === navId;
       let modeMatch = true;
-      if (btn.closest('.m-tabbar')) {
+      if (!btn.closest('.site-nav')) {
         const btnMode = btn.dataset.mode ?? null;
         modeMatch = req && req.nav === navId ? btnMode === req.mode : !btnMode;
       }
