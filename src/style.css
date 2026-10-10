@@ -118,6 +118,7 @@ body {
   body[data-section='home'] .m-corenav { display: none; }
   body[data-section='home'] .site-tools { display: flex; }
   body[data-section='home'] .m-menuwrap { display: none; }
+  body[data-section='home'] .site-tools [aria-label='菜单'] { display: none; }
   .site-tools { display: none; grid-column: 3; grid-row: 1; align-self: center; }
   .m-corenav .site-nav-item {
     background: none; border: 0; padding: 2px 0; min-width: 0;
