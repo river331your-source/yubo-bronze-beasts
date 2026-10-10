@@ -23,3 +23,19 @@ export function getDeviceProfile() {
 export function isPortraitPhone() {
   return window.innerHeight > window.innerWidth && Math.min(window.innerWidth, window.innerHeight) < 620;
 }
+
+/** 手机（粗指针且短边 < 900）；桌面窄窗口不误判 */
+export function isMobileDevice() {
+  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+  return coarse && Math.min(window.innerWidth, window.innerHeight) < 900;
+}
+
+export function isPortraitOrientation() {
+  return window.matchMedia?.('(orientation: portrait)')?.matches
+    ?? (window.innerHeight > window.innerWidth);
+}
+
+/** 手机且竖屏：比赛版竖屏限定体验的判定 */
+export function isMobilePortrait() {
+  return isMobileDevice() && isPortraitOrientation();
+}

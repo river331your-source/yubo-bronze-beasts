@@ -1,11 +1,15 @@
-import { isPortraitPhone } from './deviceProfile.js';
+import { isMobilePortrait } from './deviceProfile.js';
 
 let deferred = [];
 let flushedForOrientation = false;
 
+/** 手机竖屏：延迟重资源初始化，只显示横屏提示 */
 export function shouldDeferHeavyInit() {
-  // 比赛手机版：竖屏也是完整可玩，不再因 portrait 延迟任何初始化
-  return false;
+  try {
+    return isMobilePortrait();
+  } catch {
+    return false;
+  }
 }
 
 export function deferHeavyInit(fn) {

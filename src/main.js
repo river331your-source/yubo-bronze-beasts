@@ -8,6 +8,8 @@ import { AtlasSection } from './sections/AtlasSection.js';
 import { PatternSection } from './sections/PatternSection.js';
 import { PlaceholderSection } from './sections/PlaceholderSection.js';
 import { preloadTaotieGold } from './interactions/BronzeDoorGate.js';
+import { isMobilePortrait } from './utils/deviceProfile.js';
+import { flushDeferredHeavyInit } from './utils/heavyInitGate.js';
 
 const SECTION_IDS = ['home', 'atlas', 'pattern', 'craft', 'story'];
 
@@ -85,13 +87,25 @@ class App {
   };
 
   _bindOrientationGate() {
-    // 比赛手机版：竖屏完整可玩，orientation-gate 永不显示；
-    // 横竖屏切换仅由 CSS responsive layout 承担，不阻止运行、不重复初始化。
-    this.ui.setOrientationGate(false);
+    // 手机竖屏限定：竖屏只显示横屏提示，不初始化重资源；
+    // 转横屏后自动隐藏并执行一次延迟初始化，防重复。
+    const update = () => {
+      const portrait = isMobilePortrait();
+      this.ui.setOrientationGate(portrait);
+      if (!portrait) flushDeferredHeavyInit('landscape');
+    };
+    update();
+    this._onOrientationUpdate = update;
+    window.addEventListener('orientationchange', () => setTimeout(update, 120));
+    window.addEventListener('resize', update);
   }
 
   destroy() {
     window.removeEventListener('hashchange', this._onHashChange);
+    if (this._onOrientationUpdate) {
+      window.removeEventListener('resize', this._onOrientationUpdate);
+      this._onOrientationUpdate = null;
+    }
     stopMainLoop();
     const section = this.router?.currentSection;
     if (section && this.router.sections[section]) {

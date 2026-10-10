@@ -14,6 +14,7 @@ import {
   getPatternVessel,
 } from '../data/pattern-vessels.js';
 import { startMainLoop, stopMainLoop } from '../core/FrameLoop.js';
+import { shouldDeferHeavyInit, deferHeavyInit } from '../utils/heavyInitGate.js';
 
 /** 纹样探秘：器物线稿捶拓 + 左侧器物切换 */
 export class PatternSection {
@@ -39,6 +40,11 @@ export class PatternSection {
   /** onEnter: 线稿舞台 + 捶拓 + 左侧器物切换器 */
   async onEnter() {
     if (this.active) return;
+    if (shouldDeferHeavyInit()) {
+      console.log('[PatternSection] 手机竖屏 — 延迟线稿/手势初始化，等待横屏');
+      deferHeavyInit(() => { if (!this.active) this.onEnter(); });
+      return;
+    }
     this.active = true;
 
     await this._preloadPatternLinearts();
@@ -226,6 +232,10 @@ export class PatternSection {
   }
 
   async _startGesture(gen) {
+    if (shouldDeferHeavyInit()) {
+      console.log('[PatternSection] 手机竖屏中 — 跳过摄像头/MediaPipe 启动');
+      return;
+    }
     try {
       const gc = new GestureController(this.videoEl);
       await gc.init();
