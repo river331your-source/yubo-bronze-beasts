@@ -53,6 +53,7 @@ export class HomeSection {
       return;
     }
 
+    console.log('[ENTER] 1 click received');
     this._setEnterBtnLoading(true);
     this._gateTransitioning = true;
 
@@ -60,10 +61,15 @@ export class HomeSection {
     this._prewarmedGate = null;
     this.gate = gate;
 
-    if (!gate.root?.isConnected) {
-      gate.mount();
-    } else {
-      gate.reveal();
+    try {
+      if (!gate.root?.isConnected) {
+        gate.mount();
+      } else {
+        gate.reveal();
+      }
+      console.log('[ENTER] 2 opening gate');
+    } catch (err) {
+      console.warn('[ENTER] gate mount/reveal 失败，继续进入:', err?.message ?? err);
     }
 
     this._atlasReadyPromise = this._prepareAtlasBehindGate();
@@ -71,18 +77,36 @@ export class HomeSection {
 
   async _prepareAtlasBehindGate() {
     const atlas = this.router?.sections?.atlas;
+    console.log('[ENTER] 3 preload atlas');
     try {
       atlas?.enterBehindGate?.();
-      await this.router.switchSection('atlas');
-      await atlas?.whenReady();
+      await Promise.race([
+        (async () => {
+          await this.router.switchSection('atlas');
+          console.log('[ENTER] 4 switch atlas');
+          await atlas?.whenReady();
+        })(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Atlas preload timeout 4s')), 4000)
+        ),
+      ]);
     } catch (err) {
-      console.error('[HomeSection] atlas preload failed:', err);
-      atlas?.cancelBehindGate?.();
+      console.warn('[ENTER] preload 失败，仍尝试直接进入 atlas:', err?.message ?? err);
+      try {
+        atlas?.cancelBehindGate?.();
+        await this.router.switchSection('atlas');
+      } catch (err2) {
+        console.error('[ENTER FAILED]', err2);
+      }
+    } finally {
+      console.log('[ENTER] 5 complete');
       this._setEnterBtnLoading(false);
-      this._gateTransitioning = false;
-      this.gate?.destroy();
-      this.gate = null;
-      this._prewarmBronzeGate();
+      if (this.router?.currentSection !== 'atlas') {
+        this._gateTransitioning = false;
+        this.gate?.destroy();
+        this.gate = null;
+        this._prewarmBronzeGate();
+      }
     }
   }
 

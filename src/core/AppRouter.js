@@ -30,24 +30,29 @@ export class AppRouter {
 
     this._busy = true;
 
-    const prev = this.currentSection;
-    if (prev && this.sections[prev]) {
-      this.sections[prev].onLeave?.();
+    try {
+      const prev = this.currentSection;
+      if (prev && this.sections[prev]) {
+        this.sections[prev].onLeave?.();
+      }
+
+      this.currentSection = sectionId;
+      this.ui.setSection(sectionId);
+      this.ui.setActiveNav(sectionId);
+      this.ui.logSectionState('AppRouter.switchSection');
+
+      await this.sections[sectionId].onEnter?.();
+
+      this.ui.logSectionState(`AppRouter.switchSection→${sectionId}`);
+
+      const hash = sectionId === 'home' ? '' : `#/${sectionId}`;
+      history.replaceState(null, '', location.pathname + location.search + hash);
+    } catch (err) {
+      console.error(`[AppRouter] switchSection(${sectionId}) 失败:`, err);
+      throw err;
+    } finally {
+      this._busy = false;
     }
-
-    this.currentSection = sectionId;
-    this.ui.setSection(sectionId);
-    this.ui.setActiveNav(sectionId);
-    this.ui.logSectionState('AppRouter.switchSection');
-
-    await this.sections[sectionId].onEnter?.();
-
-    this.ui.logSectionState(`AppRouter.switchSection→${sectionId}`);
-
-    const hash = sectionId === 'home' ? '' : `#/${sectionId}`;
-    history.replaceState(null, '', location.pathname + location.search + hash);
-
-    this._busy = false;
   }
 
   loadArtifact(index) {

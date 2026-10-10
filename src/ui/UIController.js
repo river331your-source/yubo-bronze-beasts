@@ -184,12 +184,6 @@ export class UIController {
 
     this.currentSection = sectionId;
     this.mainBody?.setAttribute('data-section', sectionId);
-    document.body.setAttribute('data-section', sectionId);
-    // 进入展厅后才允许胶囊导航出现；首页/未知状态一律隐藏
-    document.body.classList.toggle(
-      'inside-museum',
-      sectionId === 'atlas' || sectionId === 'pattern'
-    );
 
     const isHome = sectionId === 'home';
     const isAtlas = sectionId === 'atlas';

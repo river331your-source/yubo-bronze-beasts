@@ -94,6 +94,9 @@ class App {
     this.ui.onTouchAction = (action) => {
       if (this.router.currentSection === 'atlas') this.router.sections.atlas?.handleTouchAction?.(action);
     };
+    // 临时入口排障钩：控制台执行 __debugEnterAtlas() 直达形制，
+    // 能进 → 查 Home/门/预载；不能进 → 查 switchSection/AtlasSection.onEnter
+    window.__debugEnterAtlas = () => this.router.switchSection('atlas');
     this._bindOrientationGate();
     syncVisualViewportHeight();
     window.addEventListener('resize', syncVisualViewportHeight);

@@ -126,6 +126,7 @@ export class AtlasSection {
     this.active = true;
     this._resetReadyPromise();
 
+    try {
     if (!document.getElementById('section-atlas') || !this.canvas) {
       console.error('[AtlasSection] 容器缺失，无法初始化');
       this._markReady();
@@ -222,6 +223,11 @@ export class AtlasSection {
         logAtlasViewportDiagnostics('AtlasSection.+2s', this.sceneManager);
       }
     }, 2000);
+    } catch (err) {
+      console.error('[AtlasSection] onEnter 失败（版块已显示，loading 由 SceneManager 兜底）:', err);
+    } finally {
+      this._markReady();
+    }
   }
 
   _canReuseSceneManager() {
